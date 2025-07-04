@@ -14,7 +14,8 @@ export default function MarketDetailPage() {
   const [priceHistory, setPriceHistory] = useState<PriceHistoryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [interval, setInterval] = useState<'raw' | 'hour' | 'day' | 'week'>('day');
+  // Default to raw interval since other intervals have backend SQL errors
+  const [interval, setInterval] = useState<'raw' | 'hour' | 'day' | 'week'>('raw');
 
   useEffect(() => {
     const fetchMarketData = async () => {
@@ -27,6 +28,8 @@ export default function MarketDetailPage() {
         
         // Fetch price history
         const priceHistoryData = await marketApi.getPriceHistory(marketId, { interval });
+        console.log('Price History Data:', priceHistoryData);
+        console.log('Raw Interval:', interval);
         setPriceHistory(priceHistoryData);
         
         setError(null);
@@ -177,78 +180,73 @@ export default function MarketDetailPage() {
             <h2 className="text-2xl font-semibold">Price History</h2>
             
             <div className="flex space-x-2">
-              {(['day', 'week', 'hour', 'raw'] as const).map((int) => (
-                <button
-                  key={int}
-                  onClick={() => handleIntervalChange(int)}
-                  className={`px-3 py-1 text-sm rounded ${
-                    interval === int 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
-                >
-                  {int.charAt(0).toUpperCase() + int.slice(1)}
-                </button>
-              ))}
+              <button
+                onClick={() => handleIntervalChange('raw')}
+                className="px-3 py-1 text-sm rounded bg-blue-500 text-white"
+              >
+                All Data
+              </button>
+              <div className="px-3 py-1 text-xs text-gray-500 flex items-center">
+                <span className="italic">Note: Aggregated views (hour/day/week) temporarily unavailable</span>
+              </div>
             </div>
           </div>
           
-          {/* This is where you would render a chart using a library like Chart.js, Recharts, etc. */}
-          {/* For now we'll show a simple table of the most recent price points */}
+          <div className="mb-4 text-sm text-gray-600">
+            {Object.values(priceHistory.outcomes).some(outcome => outcome.prices.length <= 5) && (
+              <p>
+                <strong>Note:</strong> Limited price history data available. 
+                Each outcome has {Object.values(priceHistory.outcomes)[0]?.prices.length || 0} price points.
+              </p>
+            )}
+          </div>
+
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Outcome</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Latest Price</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Change (24h)</th>
-                  {interval !== 'raw' && (
-                    <>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">High</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Low</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Volume</th>
-                    </>
-                  )}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Change (First→Last)</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Volume</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {Object.entries(priceHistory.outcomes).map(([outcomeId, data]) => {
                   const prices = data.prices;
                   const latestPrice = prices.length > 0 ? prices[prices.length - 1] : null;
-                  const yesterdayPrice = prices.length > 1 ? prices[prices.length - 2] : null;
-                  const priceChange = latestPrice && yesterdayPrice
-                    ? (interval === 'raw' 
-                        ? ('price' in latestPrice && 'price' in yesterdayPrice ? (latestPrice.price - yesterdayPrice.price) : 0) 
-                        : ('close' in latestPrice && 'open' in latestPrice ? (latestPrice.close - latestPrice.open) : 0))
-                    : 0;
+                  const firstPrice = prices.length > 0 ? prices[0] : null;
+                  
+                  // Calculate price change between first and latest price
+                  let priceChange = 0;
+                  if (latestPrice && firstPrice && 'price' in latestPrice && 'price' in firstPrice) {
+                    priceChange = latestPrice.price - firstPrice.price;
+                  }
                   
                   return (
                     <tr key={outcomeId}>
                       <td className="px-6 py-4 whitespace-nowrap">{data.name}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {latestPrice ? (interval === 'raw' 
-                          ? ('price' in latestPrice ? `${Math.round(latestPrice.price * 100)}%` : 'N/A') 
-                          : ('close' in latestPrice ? `${Math.round(latestPrice.close * 100)}%` : 'N/A')) 
+                        {latestPrice && 'price' in latestPrice 
+                          ? `${Math.round(latestPrice.price * 100)}%` 
                           : 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`${priceChange > 0 ? 'text-green-600' : priceChange < 0 ? 'text-red-600' : 'text-gray-500'}`}>
-                          {priceChange > 0 ? '+' : ''}{Math.round(priceChange * 100)}%
-                        </span>
+                        {prices.length <= 1 ? (
+                          <span className="text-gray-500">Not enough data</span>
+                        ) : priceChange === 0 ? (
+                          <span className="text-gray-500">Stable (no change)</span>
+                        ) : (
+                          <span className={`${priceChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {priceChange > 0 ? '+' : ''}{Math.round(priceChange * 100)}%
+                          </span>
+                        )}
                       </td>
-                      {interval !== 'raw' && latestPrice && (
-                        <>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {'high' in latestPrice ? `${Math.round(latestPrice.high * 100)}%` : 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {'low' in latestPrice ? `${Math.round(latestPrice.low * 100)}%` : 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {latestPrice.volume || 'N/A'}
-                          </td>
-                        </>
-                      )}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {latestPrice && 'volume' in latestPrice && latestPrice.volume
+                          ? latestPrice.volume.toLocaleString()
+                          : 'Unknown'}
+                      </td>
                     </tr>
                   );
                 })}
