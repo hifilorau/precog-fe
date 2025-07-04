@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Market, Outcome } from '@/lib/types/markets';
@@ -52,24 +52,30 @@ export default function MarketsPage() {
     if (pagination.limit !== 20) params.set('limit', pagination.limit.toString());
     if (excludeResolved) params.set('exclude_resolved', 'true');
     
-    router.push(`/markets?${params.toString()}`);
+    // Only update URL if it's actually changing to avoid loops
+    const newQueryString = params.toString();
+    const currentQuery = window.location.search.replace('?', '');
+    
+    if (newQueryString !== currentQuery) {
+      console.log('Updating URL params:', newQueryString);
+      router.replace(`/markets?${newQueryString}`, { scroll: false });
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);  // We're using eslint-disable to avoid dependency array changes
   
-  // Debounced search function
+  // Debounced search function - only for filter changes, not pagination
   useEffect(() => {
+    // Skip this effect when it's triggered by pagination changes
+    if (isPageChangeRef.current) return;
+    
     const timer = setTimeout(() => {
-      if (pagination.page !== 1) {
-        setPagination(prev => ({ ...prev, page: 1 })); // Reset to page 1 when filters change
-      } else {
-        updateQueryParams();
-      }
+      updateQueryParams();
     }, 500);
     
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    // Keep a consistent order in all dependency arrays
+    // Only watch filter changes, NOT pagination
     searchQuery,
     selectedCategory,
     selectedStatus,
@@ -77,23 +83,37 @@ export default function MarketsPage() {
     excludeResolved,
     sortBy,
     sortOrder,
-    pagination.page,
-    pagination.limit,
     // updateQueryParams removed from deps to prevent array size changes
   ]);
   
-  // Reset to page 1 when filters change
+  // Handle URL updates when pagination changes
   useEffect(() => {
-    if (pagination.page !== 1) {
-      updateQueryParams();
+    // If this is a manual page change through the pagination controls
+    if (isPageChangeRef.current) {
+      isPageChangeRef.current = false; // Reset the flag
+      updateQueryParams(); // Update URL to reflect the new page
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     // Keep a consistent order in all dependency arrays
     pagination.page,
     pagination.limit,
-    excludeResolved,
     // updateQueryParams removed from deps to prevent array size changes
+  ]);
+  
+  // Reset to page 1 when filters (except pagination) change
+  useEffect(() => {
+    setPagination(prev => ({ ...prev, page: 1 }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    // Only include filter dependencies, NOT pagination
+    searchQuery,
+    selectedCategory,
+    selectedStatus,
+    selectedProvider,
+    excludeResolved,
+    sortBy,
+    sortOrder,
   ]);
 
   // Fetch markets with filters
@@ -101,18 +121,20 @@ export default function MarketsPage() {
     const fetchMarkets = async () => {
       try {
         setLoading(true);
-        // Logging the API request parameters to debug
+        
+        // All filtering and sorting is now handled by the backend
         const apiParams = {
           limit: pagination.limit,
           skip: (pagination.page - 1) * pagination.limit,
           include_outcomes: true,
-          include_price_history: false,
+          include_price_history: true, // Keep price history for the volume display in market cards
           search: searchQuery || undefined,
           category: selectedCategory || undefined,
           status: selectedStatus || undefined,
           provider: selectedProvider || undefined,
-          sort_by: sortBy === 'volume' ? 'updated_at' : sortBy, // Backend might not support volume sorting correctly
+          sort_by: sortBy, // Now the backend supports volume sorting directly
           sort_order: sortOrder,
+          exclude_resolved: excludeResolved, // Use the new backend parameter
         };
         
         console.log('API Request Params:', apiParams);
@@ -128,7 +150,8 @@ export default function MarketsPage() {
           itemCount: response.items?.length || 0
         });
         
-        let filteredItems = response.items;
+        const { items } = response;
+        const filteredItems = items;
         
         // Debug: Log first few markets and their outcomes
         console.log('First few markets before filtering:', response.items.slice(0, 2).map((m: Market) => ({
@@ -137,135 +160,38 @@ export default function MarketsPage() {
           outcomes: m.outcomes?.map((o: Outcome) => ({ name: o.name, probability: o.probability })) || []
         })));
         
-        // Client-side filtering for 100% resolved markets
+        // Process the response - no client-side filtering needed anymore!
         console.log('Initial items from API:', filteredItems.length);
         
-        if (excludeResolved) {
-          console.log('Exclude resolved is active');
-          const beforeCount = filteredItems.length;
-          
-          const resolvedIds: string[] = [];
-          
-          filteredItems = filteredItems.filter((market: Market) => {
-            // Skip markets without outcomes
-            if (!market.outcomes || market.outcomes.length === 0) {
-              return true;
-            }
-            
-            // Check if any outcome has 100% or near 100% probability
-            const hasResolvedOutcome = market.outcomes.some((outcome: Outcome) => {
-              const prob = outcome.probability;
-              // Check for different probability formats and near-100% values
-              const isResolved = (
-                // For probabilities stored as percentages (0-100)
-                (typeof prob === 'number' && prob >= 98.5) || 
-                // For probabilities stored as decimals (0-1)
-                (typeof prob === 'number' && prob <= 1.0 && prob >= 0.985)
-              );
-              
-              if (isResolved) {
-                resolvedIds.push(market.id);
-              }
-              
-              return isResolved;
-            });
-            
-            // Keep markets that don't have any resolved outcomes
-            return !hasResolvedOutcome;
-          });
-          
-          console.log(`Filtered out ${beforeCount - filteredItems.length} resolved markets, ${filteredItems.length} remaining`);
-          if (resolvedIds.length > 0) {
-            console.log('Filtered out market IDs:', resolvedIds);
-          }
-        } else {
-          console.log('Exclude resolved is NOT active - should show all markets');
-        }
+        // The backend now handles all filtering:
+        // 1. Excluding resolved markets with exclude_resolved=true parameter
+        // 2. Volume-based sorting with sort_by=volume parameter
         
-        // Client-side sorting for volume if needed
-        if (sortBy === 'volume') {
-          filteredItems = filteredItems.sort((a: Market, b: Market) => {
-            // Calculate total volume for market a
-            const volumeA = a.outcomes?.reduce((sum: number, outcome: Outcome) => {
-              const latestPrice = outcome.price_history?.[outcome.price_history.length - 1];
-              // Handle null values in volume
-              const volume = latestPrice && typeof latestPrice.volume === 'number' ? latestPrice.volume : 0;
-              return sum + volume;
-            }, 0) || 0;
-            
-            // Calculate total volume for market b
-            const volumeB = b.outcomes?.reduce((sum: number, outcome: Outcome) => {
-              const latestPrice = outcome.price_history?.[outcome.price_history.length - 1];
-              // Handle null values in volume
-              const volume = latestPrice && typeof latestPrice.volume === 'number' ? latestPrice.volume : 0;
-              return sum + volume;
-            }, 0) || 0;
-            
-            // Sort based on volume and order
-            return sortOrder === 'asc' ? Number(volumeA) - Number(volumeB) : Number(volumeB) - Number(volumeA);
-          });
-        }
-        
-        // Store the original API pagination metadata first
+        // Store the API response data for debugging
         const apiTotal = response.total;
         const apiPages = response.pages;
         const apiLimit = response.limit;
         
-        console.log('API Pagination Metadata:', {
+        console.log('API Response:', {
           total: apiTotal, 
-          page: response.page,
-          pages: apiPages, 
+          items: filteredItems.length,
+          pages: apiPages,
           limit: apiLimit
         });
         
-        // Use original API pagination when no client-side filtering is needed
-        // This ensures we show correct pagination for the full dataset from the API
-        if (!excludeResolved && sortBy !== 'volume') {
-          // Use the API's pagination directly when no client-side filtering is needed
-          setMarkets(filteredItems);
-          
-          // Use the API's pagination metadata
-          setPagination({
-            total: apiTotal,
-            page: pagination.page,
-            pages: apiPages,
-            limit: pagination.limit,
-          });
-        } else {
-          // When client-side filtering is applied, we need to calculate pagination ourselves
-          console.log('Applying client-side filtering/sorting and pagination');
-          
-          // Calculate actual pagination values based on filtered results
-          const totalItems = filteredItems.length;
-          const totalPages = Math.ceil(totalItems / pagination.limit);
-          const currentPage = Math.min(pagination.page, totalPages || 1);
-          
-          // Apply client-side pagination to the filtered items
-          const startIndex = (currentPage - 1) * pagination.limit;
-          const endIndex = startIndex + pagination.limit;
-          const paginatedItems = filteredItems.slice(startIndex, endIndex);
-          
-          console.log('Client-side Pagination:', { 
-            total: totalItems, 
-            page: currentPage, 
-            pages: totalPages, 
-            limit: pagination.limit,
-            startIndex,
-            endIndex,
-            itemsInCurrentPage: paginatedItems.length
-          });
-          
-          // Set state for client-side rendering
-          setMarkets(paginatedItems);
-          
-          // Update pagination with client-side values
-          setPagination({
-            total: totalItems,
-            page: currentPage,
-            pages: totalPages || 1, // Ensure at least one page
-            limit: pagination.limit,
-          });
-        }
+        // The backend now handles all filtering, sorting and pagination
+        console.log('Using server-side pagination, filtering and sorting');
+        
+        // Set the markets from the API response
+        setMarkets(filteredItems);
+        
+        // Use the API's pagination metadata
+        setPagination({
+          total: apiTotal,
+          page: pagination.page,
+          pages: apiPages,
+          limit: pagination.limit,
+        });
         
         // Extract unique categories and providers for filter options
         const categories = new Set<string>();
@@ -302,9 +228,20 @@ export default function MarketsPage() {
     pagination.limit
   ]);
 
+  // This flag helps prevent infinite loops when changing pages
+  const isPageChangeRef = useRef(false);
+  
   const handlePageChange = (newPage: number) => {
     if (newPage > 0 && newPage <= pagination.pages) {
+      console.log(`Changing to page ${newPage}`);
+      
+      // Set flag to indicate this is a manual page change
+      isPageChangeRef.current = true;
+      
+      // Update pagination state
       setPagination((prev) => ({ ...prev, page: newPage }));
+      
+      // We'll let the effect handle the URL update when pagination changes
     }
   };
 
@@ -312,6 +249,52 @@ export default function MarketsPage() {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
     return date.toLocaleString();
+  };
+  
+  // Calculate the total volume for a market
+  const calculateMarketVolume = (market: Market) => {
+    if (!market.outcomes || market.outcomes.length === 0) {
+      return 0;
+    }
+    
+    // For debugging: log the first outcome's price history
+    if (market.outcomes[0]?.price_history) {
+      console.log('Price history for first outcome in market', market.id, ':', 
+        market.outcomes[0].price_history.map(p => ({ timestamp: p.timestamp, price: p.price, volume: p.volume }))
+      );
+    } else {
+      console.log('No price history for market', market.id);
+    }
+    
+    const totalVolume = market.outcomes.reduce((sum: number, outcome: Outcome) => {
+      // Get the latest price history point with volume if it exists
+      const volume = outcome.price_history && outcome.price_history.length > 0 
+        ? outcome.price_history[outcome.price_history.length - 1].volume || 0
+        : 0;
+      
+      console.log(`Outcome ${outcome.name} volume:`, volume);
+      return sum + volume;
+    }, 0);
+    
+    console.log(`Total volume for market ${market.id}:`, totalVolume);
+    return totalVolume;
+  };
+  
+  // Format currency with appropriate suffix (K, M, B)
+  const formatCurrency = (value: number) => {
+    if (!value) return '$0';
+    
+    if (value >= 1000000000) {
+      return '$' + (value / 1000000000).toFixed(1) + 'B';
+    }
+    if (value >= 1000000) {
+      return '$' + (value / 1000000).toFixed(1) + 'M';
+    }
+    if (value >= 1000) {
+      return '$' + (value / 1000).toFixed(1) + 'K';
+    }
+    
+    return '$' + value.toFixed(2);
   };
 
   // Status options
@@ -524,15 +507,21 @@ export default function MarketsPage() {
               >
                 <div className="border rounded-lg shadow-lg p-4 h-full hover:shadow-xl transition-shadow duration-200">
                   <div className="flex justify-between items-start mb-2">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      market.status === 'open' 
-                        ? 'bg-green-100 text-green-800' 
-                        : market.status === 'resolved' 
-                        ? 'bg-blue-100 text-blue-800' 
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {market.status.toUpperCase()}
-                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        market.status === 'open' 
+                          ? 'bg-green-100 text-green-800' 
+                          : market.status === 'resolved' 
+                          ? 'bg-blue-100 text-blue-800' 
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {market.status.toUpperCase()}
+                      </span>
+                      {/* Always show volume badge for debugging */}
+                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+                        VOL: {formatCurrency(calculateMarketVolume(market))}
+                      </span>
+                    </div>
                     <span className="text-sm text-gray-500">{market.provider}</span>
                   </div>
                   
