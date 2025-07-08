@@ -5,6 +5,10 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { marketApi } from '@/lib/services/api';
 import { Market, PriceHistoryResponse } from '@/lib/types/markets';
+import { NewsArticle } from '@/lib/types/news';
+import { getMarketNews } from '@/lib/services/newsService';
+import NewsSection from '../components/NewsSection';
+import IngestNewsButton from '../components/IngestNewsButton';
 
 export default function MarketDetailPage() {
   const params = useParams();
@@ -16,14 +20,19 @@ export default function MarketDetailPage() {
   const [error, setError] = useState<string | null>(null);
   // Default to raw interval since other intervals have backend SQL errors
   const [interval, setInterval] = useState<'raw' | 'hour' | 'day' | 'week'>('raw');
+  
+  // News state
+  const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([]);
+  const [newsLoading, setNewsLoading] = useState(true);
 
   useEffect(() => {
     const fetchMarketData = async () => {
       try {
         setLoading(true);
         
-        // Fetch market details
-        const marketData = await marketApi.getMarket(marketId, true, false);
+        // Fetch market details with tags
+        const marketData = await marketApi.getMarket(marketId, true, false, true);
+        console.log('Market data with tags:', marketData);
         setMarket(marketData);
         
         // Fetch price history
@@ -40,14 +49,41 @@ export default function MarketDetailPage() {
         setLoading(false);
       }
     };
+    
+    const fetchNewsData = async () => {
+      try {
+        setNewsLoading(true);
+        const newsData = await getMarketNews(marketId);
+        console.log('News Data:', newsData);
+        setNewsArticles(newsData);
+      } catch (err) {
+        console.error('Failed to fetch news data:', err);
+      } finally {
+        setNewsLoading(false);
+      }
+    };
 
     if (marketId) {
       fetchMarketData();
+      fetchNewsData();
     }
   }, [marketId, interval]);
 
   const handleIntervalChange = (newInterval: 'raw' | 'hour' | 'day' | 'week') => {
     setInterval(newInterval);
+  };
+  
+  // Function to refresh news data - will be passed to the IngestNewsButton
+  const refreshNews = async () => {
+    try {
+      setNewsLoading(true);
+      const newsData = await getMarketNews(marketId);
+      setNewsArticles(newsData);
+    } catch (err) {
+      console.error('Failed to refresh news data:', err);
+    } finally {
+      setNewsLoading(false);
+    }
   };
 
   const formatDate = (dateString?: string) => {
@@ -84,29 +120,54 @@ export default function MarketDetailPage() {
       </Link>
       
       <div className="bg-white shadow-lg rounded-lg p-6 mb-8">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <span className={`px-3 py-1 text-sm font-medium rounded-full ${
-              market.status === 'open' 
-                ? 'bg-green-100 text-green-800' 
-                : market.status === 'resolved' 
-                ? 'bg-blue-100 text-blue-800' 
-                : 'bg-gray-100 text-gray-800'
-            }`}>
-              {market.status.toUpperCase()}
-            </span>
-            {market.category && (
-              <span className="ml-2 px-3 py-1 text-sm bg-gray-100 text-gray-800 rounded-full">
-                {market.category}
+        <div className="flex flex-col space-y-4 mb-4">
+          <div className="flex justify-between items-start">
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className={`px-3 py-1 text-sm font-medium rounded-full ${
+                market.status === 'open' 
+                  ? 'bg-green-100 text-green-800' 
+                  : market.status === 'resolved' 
+                  ? 'bg-blue-100 text-blue-800' 
+                  : 'bg-gray-100 text-gray-800'
+              }`}>
+                {market.status.toUpperCase()}
               </span>
-            )}
+              {market.category && (
+                <span className="px-3 py-1 text-sm bg-gray-100 text-gray-800 rounded-full">
+                  {market.category}
+                </span>
+              )}
+            </div>
+            <span className="text-sm text-gray-500">{market.provider}</span>
           </div>
-          <span className="text-sm text-gray-500">{market.provider}</span>
+          
+          {/* Display tags if available */}
+          {market.tags && market.tags.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
+              {market.tags.map(tag => (
+                <span 
+                  key={tag.id}
+                  className={`px-3 py-1 text-xs font-medium rounded-full ${
+                    tag.is_primary 
+                      ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                      : 'bg-gray-50 text-gray-600 border border-gray-200'
+                  }`}
+                  title={tag.force_show ? 'Featured tag' : ''}
+                >
+                  {tag.label}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         
         <h1 className="text-3xl font-bold mb-4">{market.name}</h1>
         
-        <div className="text-lg text-gray-700 mb-6">{market.question}</div>
+        <div className="text-lg text-gray-700 mb-4">{market.question}</div>
+        
+        <div className="mb-6">
+          <IngestNewsButton marketId={marketId} onSuccess={refreshNews} />
+        </div>
         
         {market.description && (
           <div className="mb-6">
@@ -256,6 +317,11 @@ export default function MarketDetailPage() {
           
           <div className="mt-4 text-sm text-gray-500">
             Note: In the future, this section will include interactive charts for visualizing price trends.
+          </div>
+          
+          {/* News Section */}
+          <div className="mt-8">
+            <NewsSection articles={newsArticles} isLoading={newsLoading} />
           </div>
         </div>
       )}

@@ -127,7 +127,8 @@ export default function MarketsPage() {
           limit: pagination.limit,
           skip: (pagination.page - 1) * pagination.limit,
           include_outcomes: true,
-          include_price_history: true, // Keep price history for the volume display in market cards
+          include_price_history: false, // Removed to improve performance - we don't need price history for the markets listing
+          include_tags: true, // Include tags in the response
           search: searchQuery || undefined,
           category: selectedCategory || undefined,
           status: selectedStatus || undefined,
@@ -251,32 +252,34 @@ export default function MarketsPage() {
     return date.toLocaleString();
   };
   
-  // Calculate the total volume for a market
+  // Calculate the total volume for a market - optimized to handle missing price_history
   const calculateMarketVolume = (market: Market) => {
+    // If the market has a volume property directly (preferred way)
+    if (market.volume !== undefined) {
+      return market.volume;
+    }
+    
+    // If no outcomes or price history is unavailable, return 0
     if (!market.outcomes || market.outcomes.length === 0) {
       return 0;
     }
     
-    // For debugging: log the first outcome's price history
-    if (market.outcomes[0]?.price_history) {
-      console.log('Price history for first outcome in market', market.id, ':', 
-        market.outcomes[0].price_history.map(p => ({ timestamp: p.timestamp, price: p.price, volume: p.volume }))
-      );
-    } else {
-      console.log('No price history for market', market.id);
-    }
-    
+    // We're no longer requesting price_history for the markets list (for performance)
+    // but we still need to handle the case where it might be present
     const totalVolume = market.outcomes.reduce((sum: number, outcome: Outcome) => {
-      // Get the latest price history point with volume if it exists
+      // If the outcome has a volume property directly
+      if (outcome.volume !== undefined) {
+        return sum + outcome.volume;
+      }
+      
+      // Fallback to price_history if somehow available
       const volume = outcome.price_history && outcome.price_history.length > 0 
         ? outcome.price_history[outcome.price_history.length - 1].volume || 0
         : 0;
       
-      console.log(`Outcome ${outcome.name} volume:`, volume);
       return sum + volume;
     }, 0);
     
-    console.log(`Total volume for market ${market.id}:`, totalVolume);
     return totalVolume;
   };
   

@@ -3,7 +3,6 @@
  */
 
 import {
-  Market,
   MarketsResponse,
   MarketFilters,
   MarketResponse,
@@ -21,7 +20,7 @@ const MARKETS_ENDPOINT = `${API_BASE_URL}/markets`;
 /**
  * Converts an object to URL query parameters
  */
-const toQueryString = (params: Record<string, any>): string => {
+const toQueryString = (params: Record<string, string | number | boolean | undefined>): string => {
   const queryParams = new URLSearchParams();
   
   Object.entries(params).forEach(([key, value]) => {
@@ -75,12 +74,14 @@ export const marketApi = {
   getMarket: async (
     marketId: string,
     includeOutcomes: boolean = true,
-    includePriceHistory: boolean = false
+    includePriceHistory: boolean = false,
+    includeTags: boolean = true
   ): Promise<MarketResponse> => {
     try {
       const queryString = toQueryString({
         include_outcomes: includeOutcomes,
-        include_price_history: includePriceHistory
+        include_price_history: includePriceHistory,
+        include_tags: includeTags
       });
       
       const url = `${MARKETS_ENDPOINT}/${marketId}?${queryString}`;

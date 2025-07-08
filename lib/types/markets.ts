@@ -2,6 +2,15 @@
  * Type definitions for prediction market data
  */
 
+export interface MarketTag {
+  id: string;
+  external_id: string;
+  label: string;
+  slug: string;
+  is_primary: boolean;
+  force_show: boolean;
+}
+
 export interface Market {
   id: string;
   external_id: string;
@@ -18,6 +27,8 @@ export interface Market {
   resolved_at?: string;
   status: 'open' | 'closed' | 'resolved';
   outcomes?: Outcome[];
+  volume?: number;  // Total trading volume for the market
+  tags?: MarketTag[];  // Tags associated with the market
 }
 
 export interface Outcome {
@@ -25,6 +36,7 @@ export interface Outcome {
   name: string;
   probability: number;
   price_history?: PricePoint[];
+  volume?: number;  // Trading volume for this specific outcome
 }
 
 export interface PricePoint {
@@ -52,7 +64,8 @@ export interface MarketsResponse {
   limit: number;
 }
 
-export interface MarketResponse extends Market {}
+// Market response is the same as Market type
+export type MarketResponse = Market;
 
 export interface PriceHistoryResponse {
   market_id: string;
