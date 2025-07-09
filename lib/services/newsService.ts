@@ -4,6 +4,64 @@ import { NewsArticle } from '../types/news';
 // Default API URL - will be overridden by environment variable
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
+export interface SearchNewsParams {
+  query: string;
+  marketId?: string;
+  limit?: number;
+  offset?: number;
+  minRelevance?: number;
+}
+
+interface NewsSearchResponse {
+  articles: NewsArticle[];
+  count: number;
+}
+
+/**
+ * Search for news articles
+ * @param params Search parameters including query, marketId, etc.
+ * @returns Promise with search results and total count
+ */
+export async function searchNews(params: SearchNewsParams): Promise<NewsSearchResponse> {
+  try {
+    const { query, marketId, limit = 10, offset = 0, minRelevance = 0.3 } = params;
+    
+    // Build query parameters
+    const searchParams = new URLSearchParams();
+    if (query) searchParams.append('query', query);
+    if (marketId) searchParams.append('market_id', marketId);
+    if (limit) searchParams.append('limit', limit.toString());
+    if (offset) searchParams.append('offset', offset.toString());
+    searchParams.append('min_relevance', minRelevance.toString());
+    
+    const url = `${API_BASE_URL}/news/search?${searchParams.toString()}`;
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    });
+    
+    if (!response.ok) {
+      let errorMessage = 'Failed to fetch news';
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.detail || errorData.message || errorMessage;
+      } catch (e) {
+        console.error('Error parsing error response:', e);
+      }
+      throw new Error(errorMessage);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error searching news:', error);
+    throw error;
+  }
+}
+
 /**
  * Triggers news ingestion for a specific market
  * @param marketId The ID of the market to ingest news for
@@ -51,9 +109,10 @@ export async function ingestMarketNews(marketId: string): Promise<{ success: boo
 /**
  * Fetches news articles for a specific market
  * @param marketId The ID of the market to fetch news for
+ * @param minRelevance Minimum relevance score (0.0 to 1.0) to filter articles
  * @returns Promise resolving to an array of news articles
  */
-export async function getMarketNews(marketId: string): Promise<NewsArticle[]> {
+export async function getMarketNews(marketId: string, minRelevance: number = 0.5): Promise<NewsArticle[]> {
   try {
     const url = `${API_BASE_URL}/news/markets/${marketId}/news`;
     
@@ -85,8 +144,11 @@ export async function getMarketNews(marketId: string): Promise<NewsArticle[]> {
     
     const data = await response.json();
     // The API returns { articles: NewsArticle[], count: number }
-    // We need to return just the articles array from the response
-    return data.articles || [];
+    // Filter articles by minimum relevance score if provided
+    const articles = data.articles || [];
+    return articles.filter((article: NewsArticle) => 
+      article.relevance_score !== undefined && article.relevance_score >= minRelevance
+    );
   } catch (error) {
     console.error('Error fetching news for market:', error);
     return [];
