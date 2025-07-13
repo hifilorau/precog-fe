@@ -114,9 +114,13 @@ export async function ingestMarketNews(marketId: string): Promise<{ success: boo
  */
 export async function getMarketNews(marketId: string, minRelevance: number = 0.5): Promise<NewsArticle[]> {
   try {
-    const url = `${API_BASE_URL}/news/markets/${marketId}/news`;
+    const url = new URL(`${API_BASE_URL}/news/markets/${marketId}/news`);
     
-    const response = await fetch(url, {
+    // Add query parameters
+    url.searchParams.append('min_relevance', minRelevance.toString());
+    
+    console.log('Fetching market news from:', url.toString());
+    const response = await fetch(url.toString(), {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
@@ -152,5 +156,43 @@ export async function getMarketNews(marketId: string, minRelevance: number = 0.5
   } catch (error) {
     console.error('Error fetching news for market:', error);
     return [];
+  }
+}
+
+export const getNewsArticle = async (articleId: string): Promise<NewsArticle | null> => {
+  try {
+    const url = `${API_BASE_URL}/news/${articleId}`;
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      next: { revalidate: 60 } // Cache for 1 minute
+    });
+    
+    if (!response.ok) {
+      // Handle different error response formats safely
+      let errorMessage = `Failed to fetch news article ${articleId}`;
+      
+      try {
+        const errorData = await response.json();
+        if (errorData && typeof errorData === 'object') {
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        }
+      } catch (parseError) {
+        console.error('Error parsing error response:', parseError);
+      }
+      
+      // Log error but don't throw
+      console.log(errorMessage);
+      return null;
+    }
+    
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching news article:', error);
+    return null;
   }
 }

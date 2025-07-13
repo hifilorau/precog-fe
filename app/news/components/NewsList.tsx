@@ -2,7 +2,7 @@
 
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useDebouncedCallback } from 'use-debounce';
-import { NewsArticle } from '../../../lib/types/news';
+import { NewsArticle, TagReference } from '../../../lib/types/news';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -37,7 +37,7 @@ export default function NewsList({ query, tag, market, sort, currentPage }: News
         
         const offset = (currentPage - 1) * itemsPerPage;
         // Use tag as query if tag is present, otherwise use the search query or default to 'crypto'
-        const searchQuery = tag || query || 'crypto';
+        const searchQuery = tag || query || 'news';
         
         const result = await searchNews({
           query: searchQuery,
@@ -257,11 +257,11 @@ export default function NewsList({ query, tag, market, sort, currentPage }: News
             {articles.map((article) => (
               <article key={article.id} className="border-b border-gray-200 pb-6 last:border-0">
                 <div className="flex flex-col md:flex-row gap-4">
-                  {article.imageUrl ? (
+                  {article.image_url ? (
                     <div className="w-full md:w-48 flex-shrink-0 relative h-32">
                       <Image 
-                        src={article.imageUrl} 
-                        alt={article.title || 'News article image'}
+                        src={article.image_url || '/placeholder-news.jpg'}
+                        alt={article.title}
                         fill
                         className="object-cover rounded-lg"
                         sizes="(max-width: 768px) 100vw, 192px"
@@ -275,26 +275,34 @@ export default function NewsList({ query, tag, market, sort, currentPage }: News
                   )}
                   <div className="flex-1">
                     <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-                      <span>{article.source?.name || 'Unknown Source'}</span>
-                      <span>•</span>
-                      {/* <span>{format(new Date(article.publishedAt), 'MMM d, yyyy')}</span> */}
+                      <span>{article.source || 'Unknown Source'}</span>
+                      {article.published_at && (
+                        <>
+                          <span>•</span>
+                          <span>{format(new Date(article.published_at), 'MMM d, yyyy')}</span>
+                        </>
+                      )}
                     </div>
                     <h2 className="text-xl font-semibold mb-2 hover:text-blue-600">
                       <Link href={`/news/${article.id}`}>
                         {article.title}
                       </Link>
                     </h2>
-                    <p className="text-gray-700 mb-3 line-clamp-2">{article.description}</p>
+                    {article.summary && (
+                      <p className="text-gray-700 mb-3 line-clamp-2">
+                        {article.summary}
+                      </p>
+                    )}
                     
                     {article.tags && article.tags.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-3">
-                        {article.tags.map((tag) => (
+                        {article.tags.map((tag: TagReference) => (
                           <Link 
                             key={tag.id} 
-                            href={`/news?tag=${encodeURIComponent(tag.label)}`}
+                            href={`/news?tag=${encodeURIComponent(tag.name)}`}
                             className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-2.5 py-0.5 rounded-full"
                           >
-                            {tag.label}
+                            {tag.name}
                           </Link>
                         ))}
                       </div>

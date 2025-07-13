@@ -20,6 +20,7 @@ export default function MarketDetailPage() {
   const [error, setError] = useState<string | null>(null);
   // Default to raw interval since other intervals have backend SQL errors
   const [interval, setInterval] = useState<'raw' | 'hour' | 'day' | 'week'>('raw');
+  const [showDescription, setShowDescription] = useState(false);
   
   // News state
   const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([]);
@@ -86,10 +87,124 @@ export default function MarketDetailPage() {
     }
   };
 
-  const formatDate = (dateString?: string) => {
+  // Format date for display
+  const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    return date.toLocaleString();
+    return new Date(dateString).toLocaleString();
+  };
+
+  // Handle loading state
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8 flex justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  // Handle error state
+  if (error || !market) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error || 'Market not found'}
+        </div>
+        <Link href="/markets" className="text-blue-500 hover:underline">
+          ← Back to Markets
+        </Link>
+      </div>
+    );
+  }
+
+  // At this point, TypeScript knows market is not null due to earlier checks
+  if (!market) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          Market data is not available
+        </div>
+        <Link href="/markets" className="text-blue-500 hover:underline">
+          ← Back to Markets
+        </Link>
+      </div>
+    );
+  }
+
+  // Ensure market has the required properties
+  const safeMarket = market as Required<Market>;
+
+  // Render price history table
+  const renderPriceHistory = () => {
+    if (!priceHistory?.outcomes) {
+      return <p className="text-gray-500">No price history available for this market.</p>;
+    }
+
+    const outcomes = Object.entries(priceHistory.outcomes);
+    if (outcomes.length === 0) {
+      return <p className="text-gray-500">No price history data available.</p>;
+    }
+
+    return (
+      <>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Outcome</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Change</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Volume</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {outcomes.map(([outcomeId, data]) => {
+                const prices = data.prices || [];
+                const latestPrice = prices.length > 0 ? prices[prices.length - 1] : null;
+                const firstPrice = prices.length > 0 ? prices[0] : null;
+                let priceChange = 0;
+                
+                if (latestPrice && firstPrice && 'price' in latestPrice && 'price' in firstPrice) {
+                  priceChange = latestPrice.price - firstPrice.price;
+                }
+                
+                return (
+                  <tr key={outcomeId} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 whitespace-nowrap">{data.name || 'N/A'}</td>
+                    <td className="px-4 py-2 whitespace-nowrap font-medium">
+                      {latestPrice && 'price' in latestPrice 
+                        ? `${Math.round(latestPrice.price * 100)}%` 
+                        : 'N/A'}
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      {prices.length <= 1 ? (
+                        <span className="text-gray-500 text-xs">-</span>
+                      ) : priceChange === 0 ? (
+                        <span className="text-gray-500">-</span>
+                      ) : (
+                        <span className={`${priceChange > 0 ? 'text-green-600' : 'text-red-600'} font-medium`}>
+                          {priceChange > 0 ? '↑' : '↓'} {Math.abs(Math.round(priceChange * 100))}%
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                      {latestPrice && 'volume' in latestPrice && latestPrice.volume
+                        ? latestPrice.volume.toLocaleString()
+                        : '-'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        
+        {outcomes.some(([_, data]) => (data.prices?.length || 0) <= 5) && (
+          <div className="mt-3 text-xs text-gray-500">
+            Limited price history data available
+          </div>
+        )}
+      </>
+    );
   };
 
   if (loading) {
@@ -113,218 +228,184 @@ export default function MarketDetailPage() {
     );
   }
 
+  const toggleDescription = () => setShowDescription(!showDescription);
+
+  // Main render with proper type safety
   return (
-    <div className="container mx-auto px-4 py-8">
-      <Link href="/markets" className="text-blue-500 hover:underline mb-4 block">
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
+      <Link href="/markets" className="text-blue-500 hover:underline mb-6 inline-block">
         ← Back to Markets
       </Link>
       
-      <div className="bg-white shadow-lg rounded-lg p-6 mb-8">
-        <div className="flex flex-col space-y-4 mb-4">
-          <div className="flex justify-between items-start">
-            <div className="flex flex-wrap gap-2 items-center">
-              <span className={`px-3 py-1 text-sm font-medium rounded-full ${
-                market.status === 'open' 
-                  ? 'bg-green-100 text-green-800' 
-                  : market.status === 'resolved' 
-                  ? 'bg-blue-100 text-blue-800' 
-                  : 'bg-gray-100 text-gray-800'
-              }`}>
-                {market.status.toUpperCase()}
-              </span>
-              {market.category && (
-                <span className="px-3 py-1 text-sm bg-gray-100 text-gray-800 rounded-full">
-                  {market.category}
-                </span>
-              )}
+      {error && (
+        <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
+          <p>{error}</p>
+        </div>
+      )}
+      
+      {/* Top Row: Market Info + News */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Left Column: Market Info */}
+        <div className="bg-white shadow-lg rounded-lg p-6">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <div className="flex flex-wrap gap-2 items-center mb-3">
+                  <span className={`px-3 py-1 text-sm font-medium rounded-full ${
+                    market.status === 'open' 
+                      ? 'bg-green-100 text-green-800' 
+                      : market.status === 'resolved' 
+                      ? 'bg-blue-100 text-blue-800' 
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {market.status.toUpperCase()}
+                  </span>
+                  {market.category && (
+                    <span className="px-3 py-1 text-sm bg-gray-100 text-gray-800 rounded-full">
+                      {market.category}
+                    </span>
+                  )}
+                </div>
+                
+                <h1 className="text-2xl font-bold mb-2">{market.name}</h1>
+                <div className="text-lg text-gray-700 mb-4">{market.question}</div>
+                
+                <div className="flex items-center space-x-2 mb-4">
+                  <IngestNewsButton marketId={marketId} onSuccess={refreshNews} />
+                  {market.url && (
+                    <a 
+                      href={market.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-500 hover:underline flex items-center px-3 py-1 border border-gray-200 rounded-md"
+                    >
+                      View on {market.provider}
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  )}
+                </div>
+                
+                {market.description && (
+                  <div className="mb-4">
+                    <button 
+                      onClick={toggleDescription}
+                      className="text-sm text-blue-500 hover:text-blue-700 flex items-center"
+                    >
+                      {showDescription ? 'Hide description' : 'Show description'}
+                      <svg 
+                        className={`w-4 h-4 ml-1 transition-transform ${showDescription ? 'rotate-180' : ''}`} 
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {showDescription && (
+                      <div className="mt-2 text-gray-700 text-sm bg-gray-50 p-3 rounded">
+                        {market.description}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Market Metadata */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mt-4 pt-4 border-t border-gray-100">
+                  <div>
+                    <h3 className="text-xs font-medium text-gray-500">Created</h3>
+                    <p className="text-gray-800">{formatDate(market.created_at)}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-medium text-gray-500">Closes</h3>
+                    <p className="text-gray-800">{formatDate(market.closes_at)}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-medium text-gray-500">Resolved</h3>
+                    <p className="text-gray-800">{formatDate(market.resolved_at)}</p>
+                  </div>
+                </div>
+                
+                {/* Tags */}
+                {market.tags && market.tags.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <div className="flex flex-wrap gap-2">
+                      {market.tags.map(tag => (
+                        <span 
+                          key={tag.id}
+                          className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+                            tag.is_primary 
+                              ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                              : 'bg-gray-50 text-gray-600 border border-gray-200'
+                          }`}
+                          title={tag.force_show ? 'Featured tag' : ''}
+                        >
+                          {tag.label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-            <span className="text-sm text-gray-500">{market.provider}</span>
           </div>
-          
-          {/* Display tags if available */}
-          {market.tags && market.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
-              {market.tags.map(tag => (
-                <span 
-                  key={tag.id}
-                  className={`px-3 py-1 text-xs font-medium rounded-full ${
-                    tag.is_primary 
-                      ? 'bg-blue-100 text-blue-800 border border-blue-200' 
-                      : 'bg-gray-50 text-gray-600 border border-gray-200'
-                  }`}
-                  title={tag.force_show ? 'Featured tag' : ''}
-                >
-                  {tag.label}
-                </span>
+        
+        {/* Right Column: News */}
+        <div className="bg-white shadow-lg rounded-lg p-6">
+          <h2 className="text-xl font-semibold mb-4">Latest News</h2>
+          <NewsSection articles={newsArticles} isLoading={newsLoading} compact={true} />
+        </div>
+      </div>
+      
+      {/* Bottom Row: Outcomes + Price History */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column: Outcomes */}
+        <div className="bg-white shadow-lg rounded-lg p-6">
+          <h2 className="text-xl font-semibold mb-4">Outcomes</h2>
+            {safeMarket.outcomes && safeMarket.outcomes.length > 0 ? (
+            <div className="space-y-3">
+              {safeMarket.outcomes?.map((outcome) => (
+                <div key={outcome.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-medium">{outcome.name}</h3>
+                    <span className="text-lg font-semibold">
+                      {Math.round(outcome.probability * 100)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                      style={{ width: `${Math.round(outcome.probability * 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
               ))}
             </div>
+          ) : (
+            <p className="text-gray-500">No outcomes available for this market.</p>
           )}
         </div>
         
-        <h1 className="text-3xl font-bold mb-4">{market.name}</h1>
-        
-        <div className="text-lg text-gray-700 mb-4">{market.question}</div>
-        
-        <div className="mb-6">
-          <IngestNewsButton marketId={marketId} onSuccess={refreshNews} />
-        </div>
-        
-        {market.description && (
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold mb-2">Description</h2>
-            <div className="text-gray-700">{market.description}</div>
-          </div>
-        )}
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div>
-            <h3 className="text-sm font-medium text-gray-500">Created</h3>
-            <p>{formatDate(market.created_at)}</p>
-          </div>
-          <div>
-            <h3 className="text-sm font-medium text-gray-500">Closes</h3>
-            <p>{formatDate(market.closes_at)}</p>
-          </div>
-          <div>
-            <h3 className="text-sm font-medium text-gray-500">Resolved</h3>
-            <p>{formatDate(market.resolved_at)}</p>
-          </div>
-        </div>
-        
-        {market.url && (
-          <div className="mb-6">
-            <a 
-              href={market.url} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-blue-500 hover:underline flex items-center"
-            >
-              View on {market.provider} 
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-            </a>
-          </div>
-        )}
-      </div>
-      
-      {/* Outcomes Section */}
-      {market.outcomes && market.outcomes.length > 0 && (
-        <div className="bg-white shadow-lg rounded-lg p-6 mb-8">
-          <h2 className="text-2xl font-semibold mb-4">Outcomes</h2>
-          
-          <div className="space-y-4">
-            {market.outcomes.map((outcome) => (
-              <div key={outcome.id} className="border rounded p-4">
-                <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-xl font-medium">{outcome.name}</h3>
-                  <span className="text-2xl font-bold">{Math.round(outcome.probability * 100)}%</span>
-                </div>
-                
-                {/* Progress bar */}
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
-                  <div 
-                    className="bg-blue-600 h-2.5 rounded-full" 
-                    style={{ width: `${Math.round(outcome.probability * 100)}%` }}
-                  ></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      
-      {/* Price History Section */}
-      {priceHistory && Object.keys(priceHistory.outcomes).length > 0 && (
+        {/* Right Column: Price History */}
         <div className="bg-white shadow-lg rounded-lg p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-semibold">Price History</h2>
-            
-            <div className="flex space-x-2">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Price History</h2>
+            <div className="flex items-center">
               <button
                 onClick={() => handleIntervalChange('raw')}
-                className="px-3 py-1 text-sm rounded bg-blue-500 text-white"
+                className="px-3 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 transition-colors"
               >
                 All Data
               </button>
-              <div className="px-3 py-1 text-xs text-gray-500 flex items-center">
-                <span className="italic">Note: Aggregated views (hour/day/week) temporarily unavailable</span>
-              </div>
+              <span className="ml-2 text-xs text-gray-500 italic">
+                Aggregated views coming soon
+              </span>
             </div>
           </div>
           
-          <div className="mb-4 text-sm text-gray-600">
-            {Object.values(priceHistory.outcomes).some(outcome => outcome.prices.length <= 5) && (
-              <p>
-                <strong>Note:</strong> Limited price history data available. 
-                Each outcome has {Object.values(priceHistory.outcomes)[0]?.prices.length || 0} price points.
-              </p>
-            )}
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Outcome</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Latest Price</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Change (First→Last)</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Volume</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {Object.entries(priceHistory.outcomes).map(([outcomeId, data]) => {
-                  const prices = data.prices;
-                  const latestPrice = prices.length > 0 ? prices[prices.length - 1] : null;
-                  const firstPrice = prices.length > 0 ? prices[0] : null;
-                  
-                  // Calculate price change between first and latest price
-                  let priceChange = 0;
-                  if (latestPrice && firstPrice && 'price' in latestPrice && 'price' in firstPrice) {
-                    priceChange = latestPrice.price - firstPrice.price;
-                  }
-                  
-                  return (
-                    <tr key={outcomeId}>
-                      <td className="px-6 py-4 whitespace-nowrap">{data.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {latestPrice && 'price' in latestPrice 
-                          ? `${Math.round(latestPrice.price * 100)}%` 
-                          : 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {prices.length <= 1 ? (
-                          <span className="text-gray-500">Not enough data</span>
-                        ) : priceChange === 0 ? (
-                          <span className="text-gray-500">Stable (no change)</span>
-                        ) : (
-                          <span className={`${priceChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {priceChange > 0 ? '+' : ''}{Math.round(priceChange * 100)}%
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {latestPrice && 'volume' in latestPrice && latestPrice.volume
-                          ? latestPrice.volume.toLocaleString()
-                          : 'Unknown'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          
-          <div className="mt-4 text-sm text-gray-500">
-            Note: In the future, this section will include interactive charts for visualizing price trends.
-          </div>
-          
-          {/* News Section */}
-          <div className="mt-8">
-            <NewsSection articles={newsArticles} isLoading={newsLoading} />
-          </div>
+          {renderPriceHistory()}
         </div>
-      )}
+      </div>
     </div>
   );
 }
