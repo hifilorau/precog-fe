@@ -16,6 +16,7 @@ export default function MarketDetailPage() {
   
   const [market, setMarket] = useState<Market | null>(null);
   const [priceHistory, setPriceHistory] = useState<PriceHistoryResponse | null>(null);
+  const [priceHistoryLoading, setPriceHistoryLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Default to raw interval since other intervals have backend SQL errors
@@ -36,12 +37,6 @@ export default function MarketDetailPage() {
         console.log('Market data with tags:', marketData);
         setMarket(marketData);
         
-        // Fetch price history
-        const priceHistoryData = await marketApi.getPriceHistory(marketId, { interval });
-        console.log('Price History Data:', priceHistoryData);
-        console.log('Raw Interval:', interval);
-        setPriceHistory(priceHistoryData);
-        
         setError(null);
       } catch (err) {
         console.error('Failed to fetch market data:', err);
@@ -51,7 +46,34 @@ export default function MarketDetailPage() {
       }
     };
     
+    if (marketId) {
+      fetchMarketData();
+    }
+  }, [marketId]);
+
+  useEffect(() => {
+    const fetchPriceHistory = async () => {
+      if (!marketId) return;
+      try {
+        setPriceHistoryLoading(true);
+        const priceHistoryData = await marketApi.getPriceHistory(marketId, { interval });
+        console.log('Price History Data:', priceHistoryData);
+        setPriceHistory(priceHistoryData);
+      } catch (err) {
+        console.error('Failed to fetch price history:', err);
+      } finally {
+        setPriceHistoryLoading(false);
+      }
+    };
+
+    if (market) {
+      fetchPriceHistory();
+    }
+  }, [marketId, interval, market]);
+
+  useEffect(() => {
     const fetchNewsData = async () => {
+      if (!marketId) return;
       try {
         setNewsLoading(true);
         const newsData = await getMarketNews(marketId);
@@ -64,11 +86,10 @@ export default function MarketDetailPage() {
       }
     };
 
-    if (marketId) {
-      fetchMarketData();
+    if (market) { // Only fetch news when market data is available
       fetchNewsData();
     }
-  }, [marketId, interval]);
+  }, [marketId, market]); // Depend on marketId and market object
 
   const handleIntervalChange = (newInterval: 'raw' | 'hour' | 'day' | 'week') => {
     setInterval(newInterval);
@@ -135,8 +156,16 @@ export default function MarketDetailPage() {
 
   // Render price history table
   const renderPriceHistory = () => {
-    if (!priceHistory?.outcomes) {
-      return <p className="text-gray-500">No price history available for this market.</p>;
+    if (priceHistoryLoading) {
+      return (
+        <div className="flex justify-center items-center h-40">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      );
+    }
+
+    if (!priceHistory || !priceHistory.outcomes || Object.keys(priceHistory.outcomes).length === 0) {
+      return <p className="text-gray-500">No price history available.</p>;
     }
 
     const outcomes = Object.entries(priceHistory.outcomes);

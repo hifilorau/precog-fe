@@ -112,7 +112,7 @@ export async function ingestMarketNews(marketId: string): Promise<{ success: boo
  * @param minRelevance Minimum relevance score (0.0 to 1.0) to filter articles
  * @returns Promise resolving to an array of news articles
  */
-export async function getMarketNews(marketId: string, minRelevance: number = 0.5): Promise<NewsArticle[]> {
+export async function getMarketNews(marketId: string, minRelevance: number = 0.2): Promise<NewsArticle[]> {
   try {
     const url = new URL(`${API_BASE_URL}/news/markets/${marketId}/news`);
     
