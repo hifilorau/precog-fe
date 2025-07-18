@@ -28,6 +28,7 @@ export interface Market {
   status: 'open' | 'closed' | 'resolved';
   outcomes?: Outcome[];
   volume?: number;  // Total trading volume for the market
+  liquidity?: number; // Market liquidity
   tags?: MarketTag[];  // Tags associated with the market
 }
 
@@ -35,6 +36,7 @@ export interface Outcome {
   id: string;
   name: string;
   probability: number;
+  current_price?: number;
   price_history?: PricePoint[];
   volume?: number;  // Trading volume for this specific outcome
 }
@@ -78,6 +80,7 @@ export interface PriceHistoryResponse {
 
 // API Query parameters
 export interface MarketFilters {
+  [key: string]: string | number | boolean | undefined;
   provider?: string;
   status?: string;
   category?: string;
@@ -93,7 +96,28 @@ export interface MarketFilters {
 }
 
 export interface PriceHistoryFilters {
+  [key: string]: string | number | boolean | undefined;
   start_time?: string;
   end_time?: string;
   interval?: 'raw' | 'hour' | 'day' | 'week';
+}
+
+/**
+ * Type definitions for tracked markets
+ */
+
+export interface TrackedMarket {
+  id: string; // UUID
+  market_id: string; // UUID
+  user_id: string | null; // UUID
+  notes: string | null;
+  created_at: string; // ISO 8601 date string
+  updated_at: string; // ISO 8601 date string
+  market: Market; // The full market object
+}
+
+export interface TrackedMarketCreate {
+  market_id: string; // UUID
+  user_id?: string; // UUID
+  notes?: string;
 }
