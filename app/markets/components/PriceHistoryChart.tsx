@@ -3,6 +3,7 @@
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { PriceHistoryResponse } from '@/lib/types/markets';
+import styles from './PriceHistoryChart.module.css';
 
 interface PriceHistoryChartProps {
   data: PriceHistoryResponse;
@@ -14,15 +15,21 @@ interface ChartDataPoint {
   [key: string]: number | string | null;
 }
 
-// Function to generate a random color for chart lines
-const getRandomColor = () => {
-  const letters = '0123456789ABCDEF';
-  let color = '#';
-  for (let i = 0; i < 6; i++) {
-    color += letters[Math.floor(Math.random() * 16)];
-  }
-  return color;
-};
+// High-contrast, colorblind-friendly palette for dark backgrounds
+const CHART_COLORS = [
+  '#FF6B6B', // Red
+  '#FFD93D', // Yellow
+  '#6BCB77', // Green
+  '#4D96FF', // Blue
+  '#FF6FFF', // Magenta
+  '#FF922B', // Orange
+  '#845EC2', // Purple
+  '#00C9A7', // Teal
+  '#F9F871', // Light Yellow
+  '#F9844A', // Coral
+  '#43B0F1', // Sky Blue
+  '#F7B801', // Gold
+];
 
 const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ data }) => {
   if (!data || !data.outcomes || Object.keys(data.outcomes).length === 0) {
@@ -75,18 +82,21 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ data }) => {
           tickFormatter={(timeStr) => new Date(timeStr).toLocaleDateString()} 
         />
         <YAxis />
-        <Tooltip 
+        <Tooltip
           labelFormatter={(label) => new Date(label).toLocaleString()}
           formatter={(value: number) => value !== null ? value.toFixed(4) : 'N/A'}
+          wrapperClassName={styles['recharts-tooltip-wrapper']}
+          contentStyle={{ background: '#18181b', color: '#fff', borderRadius: 8, border: '1px solid #333' }}
+          itemStyle={{ color: '#fff' }}
         />
         <Legend />
-        {outcomeNames.map(name => (
+        {outcomeNames.map((name, idx) => (
           <Line 
             key={name} 
             type="monotone" 
             dataKey={name} 
-            stroke={getRandomColor()} 
-            dot={false} 
+            stroke={CHART_COLORS[idx % CHART_COLORS.length]}
+            dot={false}
             connectNulls // This will connect lines across null data points
           />
         ))}

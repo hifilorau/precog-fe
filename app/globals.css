@@ -17,7 +17,7 @@
   --accent-foreground: 0 0 0;
   --destructive: 255 0 0;
   --destructive-foreground: 255 255 255;
-  --border: 229 229 229;
+  --border: 255 0 0;
   --input: 229 229 229;
   --ring: 0 0 0;
   --radius: 0;
@@ -62,4 +62,13 @@ body {
   background-color: rgb(var(--card));
   color: rgb(var(--card-foreground));
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+.border {
+  border-color: rgb(var(--border));
+  border-radius: 0;
+}
+
+select {
+  min-height: 40px;
 }
