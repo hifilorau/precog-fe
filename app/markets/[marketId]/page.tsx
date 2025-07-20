@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import MarketVolatility from '@/app/components/MarketVolatility';
 import { useParams } from 'next/navigation';
 import { marketApi } from '@/lib/services/api';
 import { PriceHistoryResponse } from '@/lib/types/markets';
@@ -176,7 +177,22 @@ export default function MarketDetailPage() {
             toggleDescription={toggleDescription}
             formatDate={formatDate}
           />
+          {market?.url && (
+            <a
+              href={market.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm font-semibold shadow"
+            >
+              View on Polymarket ↗
+            </a>
+          )}
           <MetricsCard market={market} />
+          {market?.volatility && (
+            <div>
+              <MarketVolatility volatility={market.volatility} compact={false} />
+            </div>
+          )}
         </div>
         <div className="card p-6">
           <h2 className="text-xl font-semibold mb-4">Latest News</h2>

@@ -5,8 +5,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Market, Outcome } from '@/lib/types/markets';
 import { marketApi } from '@/lib/services/api';
+import MarketVolatility from '../components/MarketVolatility';
+import MarketFilters from '../components/MarketFilters';
 
 export default function MarketsPage() {
+  // Volatility breakout filter state
+  const [breakout1h, setBreakout1h] = useState<boolean | null>(null);
+  const [breakout6h, setBreakout6h] = useState<boolean | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -83,6 +88,8 @@ export default function MarketsPage() {
     excludeResolved,
     sortBy,
     sortOrder,
+    breakout1h,
+    breakout6h,
     // updateQueryParams removed from deps to prevent array size changes
   ]);
   
@@ -134,6 +141,8 @@ export default function MarketsPage() {
           sort_by: sortBy, // Now the backend supports volume sorting directly
           sort_order: sortOrder,
           exclude_resolved: excludeResolved, // Use the new backend parameter
+          breakout_1h: breakout1h === null ? undefined : breakout1h,
+          breakout_6h: breakout6h === null ? undefined : breakout6h,
           // include_tags: undefined, // Explicitly undefined for diagnostics
         };
         
@@ -224,6 +233,8 @@ export default function MarketsPage() {
     excludeResolved,  // Make sure this is in the same position in all arrays
     sortBy,
     sortOrder,
+    breakout1h,
+    breakout6h,
     pagination.page,
     pagination.limit
   ]);
@@ -369,132 +380,36 @@ export default function MarketsPage() {
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold mb-6">Markets</h1>
-
-      {/* Filters Section */}
-      <div className="p-4 rounded-lg mb-8 bg-card">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 items-end">
-          {/* Search Input */}
-          <div className="relative col-span-1 md:col-span-2 lg:col-span-3 xl:col-span-2">
-            <label className="block text-sm font-medium text-muted-foreground mb-1">Search</label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                <svg className="w-4 h-4 text-muted-foreground" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
-                  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/>
-                </svg>
-              </div>
-              <input
-                type="search"
-                className="block w-full p-2.5 pl-10 text-sm bg-input border border-border rounded-lg"
-                placeholder="Search markets..."
-                value={searchQuery}
-                onChange={handleSearchChange}
-              />
-            </div>
-          </div>
-
-          {/* Exclude Resolved Checkbox */}
-          <div className="flex items-center gap-2">
-            <input
-              id="exclude-resolved"
-              type="checkbox"
-              className="w-4 h-4 text-primary bg-input border-border rounded focus:ring-primary"
-              checked={excludeResolved}
-              onChange={handleExcludeResolvedChange}
-            />
-            <label htmlFor="exclude-resolved" className="text-sm text-muted-foreground">
-              Exclude 100% Resolved
-            </label>
-          </div>
-
-          {/* Filter Toggle */}
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={handleClearFilters}
-              className={`text-sm px-4 py-2 border rounded-lg ${getActiveFiltersCount() > 0 ? 'bg-primary text-primary-foreground' : 'border-border text-muted-foreground'}`}
-              disabled={getActiveFiltersCount() === 0}
-            >
-              Clear Filters {getActiveFiltersCount() > 0 && `(${getActiveFiltersCount()})`}
-            </button>
-          </div>
-        </div>
-
-        {/* Filters Row */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-          {/* Category Filter */}
-          <div>
-            <label className="block text-sm font-medium text-muted-foreground mb-1">Category</label>
-            <select
-              className="w-full text-sm bg-input border border-border rounded-lg"
-              value={selectedCategory}
-              onChange={handleCategoryChange}
-            >
-              <option value="">All Categories</option>
-              {availableCategories.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status Filter */}
-          <div>
-            <label className="block text-sm font-medium text-muted-foreground mb-1">Status</label>
-            <select
-              className="w-full text-sm bg-input border border-border rounded-lg"
-              value={selectedStatus}
-              onChange={handleStatusChange}
-            >
-              {statusOptions.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Provider Filter */}
-          <div>
-            <label className="block text-sm font-medium text-muted-foreground mb-1">Provider</label>
-            <select
-              className="w-full text-sm bg-input border border-border rounded-lg"
-              value={selectedProvider}
-              onChange={handleProviderChange}
-            >
-              <option value="">All Providers</option>
-              {availableProviders.map(provider => (
-                <option key={provider} value={provider}>{provider}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Sort Options */}
-          <div>
-            <label className="block text-sm font-medium text-muted-foreground mb-1">Sort By</label>
-            <div className="flex gap-2">
-              <select
-                className="flex-grow text-sm bg-input border border-border rounded-lg"
-                value={sortBy}
-                onChange={handleSortByChange}
-              >
-                {sortOptions.map(option => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-              <button 
-                onClick={handleSortOrderChange}
-                className="p-2 border border-border rounded-lg"
-                title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
-              >
-                {sortOrder === 'asc' ? '↑' : '↓'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-      
+      <MarketFilters
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        selectedCategory={selectedCategory}
+        setSelectedCategory={setSelectedCategory}
+        availableCategories={availableCategories}
+        selectedStatus={selectedStatus}
+        setSelectedStatus={setSelectedStatus}
+        statusOptions={statusOptions}
+        selectedProvider={selectedProvider}
+        setSelectedProvider={setSelectedProvider}
+        availableProviders={availableProviders}
+        excludeResolved={excludeResolved}
+        setExcludeResolved={setExcludeResolved}
+        sortBy={sortBy}
+        setSortBy={setSortBy}
+        sortOrder={sortOrder}
+        setSortOrder={setSortOrder}
+        handleClearFilters={handleClearFilters}
+        getActiveFiltersCount={getActiveFiltersCount}
+        breakout1h={breakout1h}
+        setBreakout1h={setBreakout1h}
+        breakout6h={breakout6h}
+        setBreakout6h={setBreakout6h}
+      />
       {error && (
         <div className="bg-destructive text-destructive-foreground px-4 py-3 rounded mb-4">
           {error}
         </div>
       )}
-      
       {loading ? (
         <div className="flex justify-center my-8">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
@@ -554,6 +469,8 @@ export default function MarketsPage() {
                     <div>Closes: {formatDate(market.closes_at)}</div>
                     <div>{market.category || 'Uncategorized'}</div>
                   </div>
+                  {/* Volatility mini-stats */}
+                  <MarketVolatility volatility={market.volatility} compact />
                 </div>
               </Link>
             ))}

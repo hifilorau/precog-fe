@@ -11,6 +11,18 @@ export interface MarketTag {
   force_show: boolean;
 }
 
+export interface MarketVolatility {
+  computed_at: string;
+  volatility_1h?: number;
+  volatility_6h?: number;
+  volatility_24h?: number;
+  volatility_7d?: number;
+  normalized_volatility?: number;
+  breakout_1h?: boolean;
+  breakout_6h?: boolean;
+  breakout_24h?: boolean;
+}
+
 export interface Market {
   id: string;
   external_id: string;
@@ -30,6 +42,7 @@ export interface Market {
   volume?: number;  // Total trading volume for the market
   liquidity?: number; // Market liquidity
   tags?: MarketTag[];  // Tags associated with the market
+  volatility?: MarketVolatility;
 }
 
 export interface Outcome {
