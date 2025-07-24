@@ -128,7 +128,7 @@ const OpportunitiesPage = () => {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Market Opportunities</h1>
+        <h1 className="text-3xl font-bold text-green-500 mb-2">Market Opportunities</h1>
         <p className="text-gray-600">Track and analyze prediction market opportunities</p>
       </div>
 

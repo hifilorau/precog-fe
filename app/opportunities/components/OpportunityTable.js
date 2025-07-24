@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 
 const OpportunityTable = ({ 
   opportunities, 
@@ -9,9 +10,44 @@ const OpportunityTable = ({
   sortOrder, 
   onSort 
 }) => {
+  const [trackingStates, setTrackingStates] = useState({});
+  const [trackingLoading, setTrackingLoading] = useState({});
+
   const formatPercentage = (value) => {
     if (value === null || value === undefined) return 'N/A';
     return `${(value * 100).toFixed(2)}%`;
+  };
+
+  const formatMovement = (magnitude) => {
+    if (!magnitude) return 'N/A';
+    return `${(magnitude * 100).toFixed(1)}%`;
+  };
+
+  const handleTrackToggle = async (marketId, isCurrentlyTracked) => {
+    setTrackingLoading(prev => ({ ...prev, [marketId]: true }));
+    
+    try {
+      const method = isCurrentlyTracked ? 'DELETE' : 'POST';
+      const response = await fetch(`http://localhost:8000/api/v1/tracked-markets/by-market/${marketId}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        setTrackingStates(prev => ({
+          ...prev,
+          [marketId]: !isCurrentlyTracked
+        }));
+      } else {
+        console.error('Failed to toggle tracking:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Error toggling tracking:', error);
+    } finally {
+      setTrackingLoading(prev => ({ ...prev, [marketId]: false }));
+    }
   };
 
   const formatVolume = (volume) => {
@@ -115,10 +151,10 @@ const OpportunityTable = ({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+    <div className="rounded-lg shadow-sm border border-gray-200 overflow-hidden">
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Market / Outcome
@@ -142,16 +178,19 @@ const OpportunityTable = ({
                 Created
               </SortableHeader>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Track
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="divide-y divide-gray-200">
             {filteredOpportunities.map((opportunity) => (
               <tr key={opportunity.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4">
                   <div>
-                    <div className="text-sm font-medium text-gray-900 mb-1">
+                    <div className="text-sm font-medium text-white mb-1">
                       {opportunity.market?.name || 'Unknown Market'}
                     </div>
                     {opportunity.outcome && (
@@ -162,7 +201,7 @@ const OpportunityTable = ({
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-sm font-medium text-white">
                     {opportunity.outcome ? formatPercentage(opportunity.outcome.current_price) : formatPercentage(opportunity.market_probability)}
                   </div>
                   <div className="text-xs text-gray-500">
@@ -173,8 +212,8 @@ const OpportunityTable = ({
                   <div className="flex items-center">
                     <span className="mr-2">{getDirectionIcon(opportunity.direction)}</span>
                     <div>
-                      <div className="text-sm font-medium text-gray-900">
-                        {formatPercentage(opportunity.magnitude)}
+                      <div className="text-sm font-medium text-white">
+                        {formatMovement(opportunity.magnitude)}
                       </div>
                       <div className="text-xs text-gray-500">
                         {opportunity.window || 'N/A'} window
@@ -182,11 +221,11 @@ const OpportunityTable = ({
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-900">
+                <td className="px-6 py-4 text-sm text-white">
                   {formatVolume(opportunity.market?.volume)}
                 </td>
                 <td className="px-6 py-4">
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-sm font-medium text-white">
                     {(opportunity.opportunity_score * 100).toFixed(1)}%
                   </div>
                   {opportunity.confidence_score && (
@@ -198,8 +237,29 @@ const OpportunityTable = ({
                 <td className="px-6 py-4">
                   {getStatusBadge(opportunity.status)}
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-500">
+                <td className="px-6 py-4 text-sm text-white">
                   {new Date(opportunity.created_at).toLocaleDateString()}
+                </td>
+                <td className="px-6 py-4">
+                  {(() => {
+                    const marketId = opportunity.market?.id;
+                    const isTracked = trackingStates[marketId] !== undefined ? trackingStates[marketId] : opportunity.is_tracked;
+                    const isLoading = trackingLoading[marketId];
+                    
+                    return (
+                      <button
+                        onClick={() => handleTrackToggle(marketId, isTracked)}
+                        disabled={isLoading}
+                        className={`px-3 py-1 rounded text-xs font-medium ${
+                          isTracked 
+                            ? 'bg-green-100 text-green-800 hover:bg-green-200' 
+                            : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        {isLoading ? '...' : (isTracked ? 'Tracked' : 'Track')}
+                      </button>
+                    );
+                  })()} 
                 </td>
                 <td className="px-6 py-4">
                   <Link
