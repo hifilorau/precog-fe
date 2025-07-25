@@ -26,6 +26,12 @@ const OpportunityTable = ({
   const handleTrackToggle = async (marketId, isCurrentlyTracked) => {
     setTrackingLoading(prev => ({ ...prev, [marketId]: true }));
     
+    // Optimistically update the UI immediately
+    setTrackingStates(prev => ({
+      ...prev,
+      [marketId]: !isCurrentlyTracked
+    }));
+    
     try {
       const method = isCurrentlyTracked ? 'DELETE' : 'POST';
       const response = await fetch(`http://localhost:8000/api/v1/tracked-markets/by-market/${marketId}`, {
@@ -35,15 +41,21 @@ const OpportunityTable = ({
         },
       });
       
-      if (response.ok) {
+      if (!response.ok) {
+        // Revert the optimistic update if the request failed
         setTrackingStates(prev => ({
           ...prev,
-          [marketId]: !isCurrentlyTracked
+          [marketId]: isCurrentlyTracked
         }));
-      } else {
         console.error('Failed to toggle tracking:', response.statusText);
       }
+      // If successful, the optimistic update already reflects the correct state
     } catch (error) {
+      // Revert the optimistic update if there was an error
+      setTrackingStates(prev => ({
+        ...prev,
+        [marketId]: isCurrentlyTracked
+      }));
       console.error('Error toggling tracking:', error);
     } finally {
       setTrackingLoading(prev => ({ ...prev, [marketId]: false }));

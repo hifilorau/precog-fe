@@ -1,8 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
+
+// Dynamically import the PriceHistoryChart component with no SSR
+const PriceHistoryChart = dynamic(
+  () => import('@/app/markets/components/PriceHistoryChart'),
+  { ssr: false }
+);
 
 const OpportunityDetailPage = () => {
   const params = useParams();
@@ -13,31 +20,163 @@ const OpportunityDetailPage = () => {
   const [error, setError] = useState(null);
   const [bidAmount, setBidAmount] = useState('');
   const [bidThreshold, setBidThreshold] = useState('');
+  const [stopLossPrice, setStopLossPrice] = useState('');
+  const [autoSellPrice, setAutoSellPrice] = useState('');
+  const [bidPriceLength, setBidPriceLength] = useState('');
+  const [priceHistory, setPriceHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
 
-  useEffect(() => {
-    if (opportunityId) {
-      fetchOpportunity();
+  // Memoize fetchPriceHistory to prevent infinite re-renders
+  const fetchPriceHistory = useCallback(async (marketId) => {
+    if (!marketId) {
+      console.log('No market ID provided to fetchPriceHistory');
+      return;
     }
-  }, [opportunityId]);
-
-  const fetchOpportunity = async () => {
+    
+    console.log(`Starting to fetch price history for market ${marketId}`);
+    setLoadingHistory(true);
+    setHistoryError(null);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
     try {
-      setLoading(true);
-      const response = await fetch(`http://localhost:8000/api/v1/opportunities/${opportunityId}`);
+      // Get data for the last 30 days by default
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+      
+      const url = `http://localhost:8000/api/v1/markets/${marketId}/price-history?` +
+        `start_time=${encodeURIComponent(startDate.toISOString())}` +
+        `&end_time=${encodeURIComponent(endDate.toISOString())}`;
+      
+      console.log('Fetching from URL:', url);
+      
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      clearTimeout(timeoutId);
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch price history: ${response.status} - ${errorText}`);
       }
       
       const data = await response.json();
-      setOpportunity(data);
+      console.log('Received price history data:', data);
+      
+      if (data?.outcomes) {
+        setPriceHistory(data);
+      } else {
+        throw new Error('Invalid price history data format received');
+      }
     } catch (err) {
-      setError(err.message);
-      console.error('Error fetching opportunity:', err);
+      if (err.name === 'AbortError') {
+        console.error('Price history fetch timed out after 10 seconds');
+        setHistoryError('Request timed out. Please try again.');
+      } else {
+        console.error('Error in fetchPriceHistory:', err);
+        setHistoryError(err.message || 'Failed to load price history');
+      }
+    } finally {
+      clearTimeout(timeoutId);
+      setLoadingHistory(false);
+    }
+  }, []);
+
+  const fetchOpportunity = useCallback(async () => {
+    if (!opportunityId) return;
+    
+    try {
+      setLoading(true);
+      console.log(`Fetching opportunity ${opportunityId}...`);
+      const response = await fetch(`http://localhost:8000/api/v1/opportunities/${opportunityId}`, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}: ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Fetched opportunity data:', data);
+      setOpportunity(data);
+      
+      // If there's a market ID, fetch price history
+      if (data.market_id) {
+        await fetchPriceHistory(data.market_id);
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching opportunity:', error);
+      setError(error.message || 'Failed to load opportunity');
+      throw error;
     } finally {
       setLoading(false);
     }
-  };
+  }, [opportunityId, fetchPriceHistory]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    
+    const fetchData = async () => {
+      try {
+        console.log('Starting to fetch opportunity data...');
+        const startTime = Date.now();
+        await fetchOpportunity();
+        console.log(`Successfully fetched opportunity data in ${Date.now() - startTime}ms`);
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.error('Error in fetchData:', error);
+          setError(`Failed to load opportunity: ${error.message}`);
+        }
+      }
+    };
+    
+    fetchData();
+    
+    return () => {
+      console.log('Cleaning up opportunity fetch effect');
+      controller.abort();
+    };
+  }, [fetchOpportunity]);
+
+  // Fetch price history when opportunity data is loaded
+  useEffect(() => {
+    const marketId = opportunity?.market_id || opportunity?.market?.id;
+    if (!marketId) return;
+    
+    const controller = new AbortController();
+    
+    const fetchData = async () => {
+      try {
+        console.log('Fetching price history for market:', marketId);
+        await fetchPriceHistory(marketId);
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.error('Error in price history effect:', error);
+          setHistoryError(`Failed to load price history: ${error.message}`);
+        }
+      }
+    };
+    
+    fetchData();
+    
+    return () => {
+      console.log('Cleanup: Price history effect');
+      controller.abort();
+    };
+  }, [opportunity?.market_id, opportunity?.market?.id, fetchPriceHistory]);
 
   const formatPercentage = (value) => {
     if (value === null || value === undefined) return 'N/A';
@@ -134,8 +273,18 @@ const OpportunityDetailPage = () => {
 
   const handlePlaceOrder = () => {
     // Placeholder for order placement logic
-    alert(`Placing order: $${bidAmount} at ${bidThreshold}% threshold`);
+    const orderDetails = {
+      bidAmount: parseFloat(bidAmount),
+      bidThreshold: parseFloat(bidThreshold),
+      stopLossPrice: stopLossPrice ? parseFloat(stopLossPrice) : null,
+      autoSellPrice: autoSellPrice ? parseFloat(autoSellPrice) : null,
+      bidPriceLength: bidPriceLength ? parseInt(bidPriceLength) : null
+    };
+    
+    alert(`Placing order with details: ${JSON.stringify(orderDetails, null, 2)}`);
   };
+
+
 
   if (loading) {
     return (
@@ -193,27 +342,27 @@ const OpportunityDetailPage = () => {
         <div className="lg:col-span-2 space-y-6">
           {/* Prominent Outcome Display */}
           {opportunity.outcome && (
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-lg border-2 border-blue-200 p-6">
+            <div className="shadow-lg p-6 border">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Left side - Outcome Info */}
                 <div>
                   <div className="mb-4">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                    <h2 className="text-2xl font-bold text-white mb-2">
                       {opportunity.outcome.name}
                     </h2>
-                    <p className="text-gray-600 text-sm leading-relaxed">
+                    <p className="text-gray-400 text-sm leading-relaxed">
                       {opportunity.market?.question}
                     </p>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div className="bg-white rounded-lg p-3 border border-blue-200">
+                    <div className="rounded-lg p-3 border border-blue-200">
                       <div className="text-xs text-gray-500 mb-1">Current Price</div>
                       <div className="text-xl font-bold text-blue-600">
                         {formatPercentage(opportunity.outcome.current_price)}
                       </div>
                     </div>
-                    <div className="bg-white rounded-lg p-3 border border-blue-200">
+                    <div className="rounded-lg p-3 border border-blue-200">
                       <div className="text-xs text-gray-500 mb-1">Previous Price</div>
                       <div className="text-xl font-bold text-gray-600">
                         {getPreviousPrice(opportunity.outcome.price_history) 
@@ -237,11 +386,11 @@ const OpportunityDetailPage = () => {
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2 text-sm">
-                    <div className="bg-white px-3 py-1 rounded-full border border-blue-200">
+                    <div className="px-3 py-1 rounded-full border">
                       <span className="text-gray-600">Volume: </span>
                       <span className="font-medium">{formatVolume(opportunity.outcome.current_volume || opportunity.market?.volume)}</span>
                     </div>
-                    <div className="bg-white px-3 py-1 rounded-full border border-blue-200">
+                    <div className="px-3 py-1 rounded-full border border-blue-200">
                       <span className="text-gray-600">Status: </span>
                       <span className="font-medium capitalize">{opportunity.market?.status || 'Unknown'}</span>
                     </div>
@@ -253,7 +402,7 @@ const OpportunityDetailPage = () => {
                         href={opportunity.market.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         View on Polymarket →
                       </a>
@@ -262,66 +411,49 @@ const OpportunityDetailPage = () => {
                 </div>
 
                 {/* Right side - Price Chart */}
-                <div className="bg-white rounded-lg p-4 border border-blue-200">
-                  <h3 className="text-lg font-semibold mb-3 text-gray-900">Price Movement</h3>
-                  {renderMiniChart(opportunity.outcome.price_history)}
-                  <div className="mt-3 text-xs text-gray-500">
-                    {opportunity.outcome.price_history && opportunity.outcome.price_history.length > 0
-                      ? `${opportunity.outcome.price_history.length} data points`
-                      : 'Limited price history'
-                    }
-                  </div>
+                    {/* Price History */}
+                <div className="mt-8">
+                    <h2 className="text-xl font-semibold mb-4">Price History</h2>
+                    {loadingHistory ? (
+                    <div className="flex justify-center items-center h-64">
+                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                    </div>
+                    ) : historyError ? (
+                    <div className="text-red-500 p-4 border rounded">
+                        Error loading price history: {historyError}
+                    </div>
+                    ) : priceHistory && priceHistory.outcomes ? (
+                    <div className="space-y-4">
+                        <div className="border rounded p-4">
+                        <div className="h-[400px] w-full">
+                            <PriceHistoryChart 
+                            data={priceHistory} 
+                            highlightOutcomeId={opportunity?.outcome_id} 
+                            />
+                        </div>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                        Showing price history for the last 30 days
+                        </div>
+                    </div>
+                    ) : (
+                    <div className="text-center py-8 text-gray-500">
+                        <div className="text-4xl mb-2">📊</div>
+                        <p>No price history data available</p>
+                    </div>
+                    )}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Market Information */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-xl font-semibold mb-4">Market Information</h2>
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  {opportunity.market?.name || 'Unknown Market'}
-                </h3>
-                <p className="text-gray-600">{opportunity.market?.question}</p>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Market Volume</label>
-                  <div className="text-lg font-semibold text-gray-900">
-                    {formatVolume(opportunity.market?.volume)}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Market Status</label>
-                  <div className="text-lg font-semibold text-gray-900">
-                    {opportunity.market?.status || 'Unknown'}
-                  </div>
-                </div>
-              </div>
-
-              {opportunity.market?.url && (
-                <div>
-                  <a
-                    href={opportunity.market.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center text-blue-600 hover:text-blue-800"
-                  >
-                    View on Polymarket →
-                  </a>
-                </div>
-              )}
-            </div>
-          </div>
+      
 
           {/* Opportunity Details */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="rounded-lg shadow-sm border border-gray-200 p-6">
             <h2 className="text-xl font-semibold mb-4">Opportunity Analysis</h2>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-              <div className="text-center p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="text-center p-4 border border-blue-200">
                 <div className="text-2xl font-bold text-blue-900">
                   {opportunity.outcome ? formatPercentage(opportunity.outcome.current_price) : formatPercentage(opportunity.market_probability)}
                 </div>
@@ -330,7 +462,7 @@ const OpportunityDetailPage = () => {
                   {opportunity.outcome ? 'Outcome' : 'Market'}
                 </div>
               </div>
-              <div className="text-center p-4 bg-gray-50 rounded-lg">
+              <div className="text-center p-4 border border-gray-200">
                 <div className="text-2xl font-bold text-gray-900">
                   {formatPercentage(opportunity.magnitude)}
                 </div>
@@ -339,19 +471,19 @@ const OpportunityDetailPage = () => {
                   {getDirectionIcon(opportunity.direction)} {opportunity.window} window
                 </div>
               </div>
-              <div className="text-center p-4 bg-gray-50 rounded-lg">
+              <div className="text-center p-4 border">
                 <div className="text-2xl font-bold text-gray-900">
                   {(opportunity.opportunity_score * 100).toFixed(1)}%
                 </div>
                 <div className="text-sm text-gray-600">Opportunity Score</div>
               </div>
-              <div className="text-center p-4 bg-gray-50 rounded-lg">
+              <div className="text-center p-4 border">
                 <div className="text-2xl font-bold text-gray-900">
                   {opportunity.confidence_score ? (opportunity.confidence_score * 100).toFixed(1) + '%' : 'N/A'}
                 </div>
                 <div className="text-sm text-gray-600">Confidence</div>
               </div>
-              <div className="text-center p-4 bg-gray-50 rounded-lg">
+              <div className="text-center p-4 border">
                 <div className="text-2xl font-bold text-gray-900">
                   {formatPercentage(opportunity.divergence)}
                 </div>
@@ -393,7 +525,7 @@ const OpportunityDetailPage = () => {
 
           {/* Market Outcomes */}
           {opportunity.market?.outcomes && opportunity.market.outcomes.length > 0 && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="rounded-lg shadow-sm border border-gray-200 p-6">
               <h2 className="text-xl font-semibold mb-4">All Market Outcomes</h2>
               <div className="space-y-3">
                 {opportunity.market.outcomes.map((outcome) => (
@@ -431,7 +563,7 @@ const OpportunityDetailPage = () => {
         {/* Trading Panel */}
         <div className="space-y-6">
           {/* Order Book Placeholder */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="rounded-lg shadow-sm border border-gray-200 p-6">
             <h3 className="text-lg font-semibold mb-4">Order Book</h3>
             <div className="text-center py-8 text-gray-500">
               <div className="text-4xl mb-2">📊</div>
@@ -441,7 +573,7 @@ const OpportunityDetailPage = () => {
           </div>
 
           {/* Trading Interface */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="rounded-lg shadow-sm border border-gray-200 p-6">
             <h3 className="text-lg font-semibold mb-4">Place Order</h3>
             <div className="space-y-4">
               <div>
@@ -472,6 +604,50 @@ const OpportunityDetailPage = () => {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Stop Loss Price ($)
+                </label>
+                <input
+                  type="number"
+                  value={stopLossPrice}
+                  onChange={(e) => setStopLossPrice(e.target.value)}
+                  placeholder="Optional"
+                  min="0"
+                  step="0.01"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Auto Sell Price ($)
+                </label>
+                <input
+                  type="number"
+                  value={autoSellPrice}
+                  onChange={(e) => setAutoSellPrice(e.target.value)}
+                  placeholder="Optional"
+                  min="0"
+                  step="0.01"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Bid Price Length (days)
+                </label>
+                <input
+                  type="number"
+                  value={bidPriceLength}
+                  onChange={(e) => setBidPriceLength(e.target.value)}
+                  placeholder="Optional"
+                  min="1"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
               <button
                 onClick={handlePlaceOrder}
                 disabled={!bidAmount || !bidThreshold}
@@ -486,18 +662,10 @@ const OpportunityDetailPage = () => {
             </div>
           </div>
 
-          {/* Price History Placeholder */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold mb-4">Price History</h3>
-            <div className="text-center py-8 text-gray-500">
-              <div className="text-4xl mb-2">📈</div>
-              <div>Price chart integration</div>
-              <div className="text-sm">Coming soon</div>
-            </div>
-          </div>
+        
 
           {/* Opportunity Metadata */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="rounded-lg shadow-sm border border-gray-200 p-6">
             <h3 className="text-lg font-semibold mb-4">Metadata</h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">

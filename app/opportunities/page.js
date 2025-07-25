@@ -15,7 +15,13 @@ const OpportunitiesPage = () => {
   const [filters, setFilters] = useState({
     status: 'active',
     source: '',
-    min_score: ''
+    min_score: '',
+    max_score: '',
+    min_price: '',
+    max_price: '',
+    min_movement: '',
+    max_movement: '',
+    min_volume: '50000' // Default minimum volume of $50,000
   });
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState('desc');
@@ -23,21 +29,49 @@ const OpportunitiesPage = () => {
 
   const limit = 20;
 
+  // Build query parameters from filters
+  const buildQueryParams = useCallback((filters, page = 0) => {
+    // Convert percentage inputs to decimals for price filters
+    const convertToDecimal = (value) => {
+      if (value === '' || value === null || value === undefined) return undefined;
+      // If the value is a string that looks like a percentage (e.g., '35'), convert to decimal
+      if (typeof value === 'string' && /^\d+(\.\d+)?%?$/.test(value)) {
+        const numValue = parseFloat(value.replace('%', ''));
+        return isNaN(numValue) ? undefined : (numValue / 100).toFixed(4);
+      }
+      return value;
+    };
+
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      offset: (page * limit).toString(),
+      sort_by: sortBy,
+      sort_order: sortOrder,
+      ...(filters.status && { status: filters.status }),
+      ...(filters.source && { source: filters.source }),
+      ...(filters.min_score && { min_score: filters.min_score }),
+      ...(filters.max_score && { max_score: filters.max_score }),
+      ...(filters.min_price !== undefined && filters.min_price !== '' && { 
+        min_price: convertToDecimal(filters.min_price) 
+      }),
+      ...(filters.max_price !== undefined && filters.max_price !== '' && { 
+        max_price: convertToDecimal(filters.max_price) 
+      }),
+      ...(filters.min_movement && { min_movement: filters.min_movement }),
+      ...(filters.max_movement && { max_movement: filters.max_movement }),
+      ...(filters.min_volume && { min_volume: filters.min_volume }),
+      ...(filters.max_volume && { max_volume: filters.max_volume })
+    });
+    return params;
+  }, [sortBy, sortOrder]);
+
   // Separate function for initial load (no page dependency)
   const loadInitialOpportunities = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const params = new URLSearchParams({
-        limit: limit.toString(),
-        offset: '0',
-        sort_by: sortBy,
-        sort_order: sortOrder,
-        ...(filters.status && { status: filters.status }),
-        ...(filters.source && { source: filters.source }),
-        ...(filters.min_score && { min_score: filters.min_score })
-      });
+      const params = buildQueryParams(filters, 0);
 
       const response = await fetch(`http://localhost:8000/api/v1/opportunities/?${params}`);
       
@@ -56,31 +90,18 @@ const OpportunitiesPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [limit, sortBy, sortOrder, filters]);
+  }, [buildQueryParams, filters, limit]);
 
   // Separate function for loading more (uses current page state)
   const loadMoreOpportunities = useCallback(async () => {
-    // Prevent multiple simultaneous calls
-    if (isLoadingMore.current || loading) {
-      return;
-    }
+    if (isLoadingMore.current || !hasMore) return;
     
     try {
       isLoadingMore.current = true;
-      setLoading(true);
+      setError(null);
       
       const nextPage = page + 1;
-      const offset = (nextPage - 1) * limit;
-      
-      const params = new URLSearchParams({
-        limit: limit.toString(),
-        offset: offset.toString(),
-        sort_by: sortBy,
-        sort_order: sortOrder,
-        ...(filters.status && { status: filters.status }),
-        ...(filters.source && { source: filters.source }),
-        ...(filters.min_score && { min_score: filters.min_score })
-      });
+      const params = buildQueryParams(filters, nextPage);
 
       const response = await fetch(`http://localhost:8000/api/v1/opportunities/?${params}`);
       
@@ -100,18 +121,49 @@ const OpportunitiesPage = () => {
       setLoading(false);
       isLoadingMore.current = false;
     }
-  }, [page, limit, sortBy, sortOrder, filters, loading]);
+  }, [buildQueryParams, page, limit, filters, hasMore]);
 
+  // Reset page and reload when filters, sort, or sort order changes
   useEffect(() => {
-    loadInitialOpportunities();
+    const handler = setTimeout(() => {
+      loadInitialOpportunities();
+    }, 300); // Debounce to avoid too many API calls
+    
+    return () => clearTimeout(handler);
   }, [filters, sortBy, sortOrder, loadInitialOpportunities]);
 
   const loadMore = () => {
     loadMoreOpportunities();
   };
 
+  // Handle filter changes
   const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
+    // Convert empty strings to null for number fields to avoid sending empty strings to the API
+    const parsedValue = (['min_score', 'max_score', 'min_price', 'max_price', 'min_movement', 'max_movement', 'min_volume', 'max_volume'].includes(key) && value === '') 
+      ? null 
+      : value;
+      
+    setFilters(prev => ({
+      ...prev,
+      [key]: parsedValue
+    }));
+    setPage(0); // Reset to first page when filters change
+  };
+
+  // Reset all filters to default values
+  const resetFilters = () => {
+    setFilters({
+      status: 'active',
+      source: '',
+      min_score: '',
+      max_score: '',
+      min_price: '',
+      max_price: '',
+      min_movement: '',
+      max_movement: '',
+      min_volume: '50000',
+      max_volume: ''
+    });
   };
 
   const handleSort = (field, order) => {
@@ -119,19 +171,22 @@ const OpportunitiesPage = () => {
     setSortOrder(order);
   };
 
-
-
   if (error) {
     return <ErrorDisplay error={error} />;
   }
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-green-500 mb-2">Market Opportunities</h1>
-        <p className="text-gray-600">Track and analyze prediction market opportunities</p>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Market Opportunities</h1>
+        <button
+          onClick={resetFilters}
+          className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50"
+        >
+          Reset Filters
+        </button>
       </div>
-
+      
       <OpportunityFilters 
         filters={filters} 
         onFilterChange={handleFilterChange} 

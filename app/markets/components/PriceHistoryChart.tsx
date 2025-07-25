@@ -7,6 +7,7 @@ import styles from './PriceHistoryChart.module.css';
 
 interface PriceHistoryChartProps {
   data: PriceHistoryResponse;
+  highlightOutcomeId?: string | number;
 }
 
 // Define a type for the structured data points for the chart
@@ -31,7 +32,7 @@ const CHART_COLORS = [
   '#F7B801', // Gold
 ];
 
-const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ data }) => {
+const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ data, highlightOutcomeId }) => {
   if (!data || !data.outcomes || Object.keys(data.outcomes).length === 0) {
     return <p className="text-gray-500">No price history available to chart.</p>;
   }
@@ -63,7 +64,11 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ data }) => {
     return dataPoint;
   });
 
-  const outcomeNames = Object.values(data.outcomes).map(o => o.name);
+  const outcomes = Object.entries(data.outcomes).map(([id, outcome]) => ({
+    id,
+    name: outcome.name,
+    isHighlighted: id === highlightOutcomeId?.toString()
+  }));
 
   return (
     <ResponsiveContainer width="100%" height={400}>
@@ -76,7 +81,11 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ data }) => {
           bottom: 5,
         }}
       >
-        <CartesianGrid strokeDasharray="3 3" />
+        <CartesianGrid 
+          strokeDasharray="3 3" 
+          stroke="#2d3748" 
+          opacity={highlightOutcomeId ? 0.3 : 0.7}
+        />
         <XAxis 
           dataKey="timestamp"
           tickFormatter={(timeStr) => new Date(timeStr).toLocaleDateString()} 
@@ -90,16 +99,22 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ data }) => {
           itemStyle={{ color: '#fff' }}
         />
         <Legend />
-        {outcomeNames.map((name, idx) => (
-          <Line 
-            key={name} 
-            type="monotone" 
-            dataKey={name} 
-            stroke={CHART_COLORS[idx % CHART_COLORS.length]}
-            dot={false}
-            connectNulls // This will connect lines across null data points
-          />
-        ))}
+        {outcomes.map((outcome, idx) => {
+          const color = CHART_COLORS[idx % CHART_COLORS.length];
+          return (
+            <Line 
+              key={outcome.id}
+              type="monotone"
+              dataKey={outcome.name}
+              stroke={color}
+              strokeWidth={outcome.isHighlighted ? 3 : 1.5}
+              strokeOpacity={outcome.isHighlighted ? 1 : 0.7}
+              dot={false}
+              connectNulls
+              activeDot={outcome.isHighlighted ? { r: 4, fill: color } : undefined}
+            />
+          );
+        })}
       </LineChart>
     </ResponsiveContainer>
   );
