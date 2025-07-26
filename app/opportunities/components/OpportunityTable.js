@@ -186,8 +186,11 @@ const OpportunityTable = ({
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Status
               </th>
-              <SortableHeader field="created_at">
+              <SortableHeader field="created_at" className="w-24">
                 Created
+              </SortableHeader>
+              <SortableHeader field="closes_at" className="w-24">
+                Closes
               </SortableHeader>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Track
@@ -199,7 +202,7 @@ const OpportunityTable = ({
           </thead>
           <tbody className="divide-y divide-gray-200">
             {filteredOpportunities.map((opportunity) => (
-              <tr key={opportunity.id} className="hover:bg-gray-50">
+              <tr key={opportunity.id} className="hover:bg-black hover:bg-opacity-50">
                 <td className="px-6 py-4">
                   <div>
                     <div className="text-sm font-medium text-white mb-1">
@@ -251,6 +254,9 @@ const OpportunityTable = ({
                 </td>
                 <td className="px-6 py-4 text-sm text-white">
                   {new Date(opportunity.created_at).toLocaleDateString()}
+                </td>
+                <td className="px-6 py-4 text-sm text-white">
+                  {opportunity.market?.closes_at ? new Date(opportunity.market.closes_at).toLocaleDateString() : 'N/A'}
                 </td>
                 <td className="px-6 py-4">
                   {(() => {

@@ -26,6 +26,46 @@ const OpportunityDetailPage = () => {
   const [priceHistory, setPriceHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState(null);
+  const [orderBook, setOrderBook] = useState(null);
+  const [loadingOrderBook, setLoadingOrderBook] = useState(false);
+  const [orderBookError, setOrderBookError] = useState(null);
+
+  // Memoize fetchOrderBook to prevent infinite re-renders
+  const fetchOrderBook = useCallback(async (clobId) => {
+    if (!clobId) {
+      console.log('No CLOB ID provided to fetchOrderBook');
+      return;
+    }
+    
+    console.log(`Starting to fetch order book for CLOB ${clobId}`);
+    setLoadingOrderBook(true);
+    setOrderBookError(null);
+    
+    try {
+      const url = `https://clob.polymarket.com/book?token_id=${clobId}`;
+      console.log('Fetching order book from URL:', url);
+      
+      const response = await fetch(url, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch order book: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Received order book data:', data);
+      setOrderBook(data);
+    } catch (err) {
+      console.error('Error in fetchOrderBook:', err);
+      setOrderBookError(err.message || 'Failed to load order book');
+    } finally {
+      setLoadingOrderBook(false);
+    }
+  }, []);
 
   // Memoize fetchPriceHistory to prevent infinite re-renders
   const fetchPriceHistory = useCallback(async (marketId) => {
@@ -109,6 +149,8 @@ const OpportunityDetailPage = () => {
       
       const data = await response.json();
       console.log('Fetched opportunity data:', data);
+      console.log('Outcome data:', data.outcome);
+      console.log('CLOB ID from outcome:', data.outcome?.clob_id);
       setOpportunity(data);
       
       // If there's a market ID, fetch price history
@@ -150,6 +192,31 @@ const OpportunityDetailPage = () => {
       controller.abort();
     };
   }, [fetchOpportunity]);
+
+  // Fetch order book data when opportunity is loaded and poll every 10 seconds
+  useEffect(() => {
+    const clobId = opportunity?.outcome?.clob_id;
+    if (!clobId) {
+      console.log('No CLOB ID found in opportunity outcome');
+      return;
+    }
+    
+    console.log(`Setting up order book polling for CLOB ID: ${clobId}`);
+    
+    // Initial fetch
+    fetchOrderBook(clobId);
+    
+    // Set up polling interval
+    const intervalId = setInterval(() => {
+      fetchOrderBook(clobId);
+    }, 10000); // 10 seconds
+    
+    // Clean up on unmount
+    return () => {
+      console.log('Cleaning up order book polling');
+      clearInterval(intervalId);
+    };
+  }, [opportunity, fetchOrderBook]);
 
   // Fetch price history when opportunity data is loaded
   useEffect(() => {
@@ -443,6 +510,8 @@ const OpportunityDetailPage = () => {
                     </div>
                     )}
                 </div>
+
+
               </div>
             </div>
           )}
@@ -562,14 +631,92 @@ const OpportunityDetailPage = () => {
 
         {/* Trading Panel */}
         <div className="space-y-6">
-          {/* Order Book Placeholder */}
+          {/* Order Book */}
           <div className="rounded-lg shadow-sm border border-gray-200 p-6">
             <h3 className="text-lg font-semibold mb-4">Order Book</h3>
-            <div className="text-center py-8 text-gray-500">
-              <div className="text-4xl mb-2">📊</div>
-              <div>Order book integration</div>
-              <div className="text-sm">Coming soon</div>
-            </div>
+            {loadingOrderBook && !orderBook ? (
+              <div className="flex justify-center items-center h-64">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+              </div>
+            ) : orderBookError ? (
+              <div className="text-red-500 p-4 border rounded">
+                Error loading order book: {orderBookError}
+              </div>
+            ) : orderBook ? (
+              <div className="border rounded p-4">
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Bids */}
+                  <div>
+                    <h3 className="text-lg font-medium mb-2 text-green-600">Bids</h3>
+                    <div className="overflow-y-auto max-h-[300px]">
+                      <table className="min-w-full">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="py-2 px-4 text-left">Price</th>
+                            <th className="py-2 px-4 text-right">Size</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {orderBook.bids
+                            ?.sort((a, b) => b.price - a.price)
+                            .slice(0, 10)
+                            .map((bid, index) => (
+                              <tr key={index} className="border-b hover:bg-gray-50">
+                                <td className="py-2 px-4 text-green-600">{(bid.price * 100).toFixed(2)}%</td>
+                                <td className="py-2 px-4 text-right">{bid.size}</td>
+                              </tr>
+                            ))}
+                          {(!orderBook.bids || orderBook.bids.length === 0) && (
+                            <tr>
+                              <td colSpan="2" className="py-4 text-center text-gray-500">No bids available</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  
+                  {/* Asks */}
+                  <div>
+                    <h3 className="text-lg font-medium mb-2 text-red-600">Asks</h3>
+                    <div className="overflow-y-auto max-h-[300px]">
+                      <table className="min-w-full">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="py-2 px-4 text-left">Price</th>
+                            <th className="py-2 px-4 text-right">Size</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {orderBook.asks
+                            ?.sort((a, b) => a.price - b.price)
+                            .slice(0, 10)
+                            .map((ask, index) => (
+                              <tr key={index} className="border-b hover:bg-gray-50">
+                                <td className="py-2 px-4 text-red-600">{(ask.price * 100).toFixed(2)}%</td>
+                                <td className="py-2 px-4 text-right">{ask.size}</td>
+                              </tr>
+                            ))}
+                          {(!orderBook.asks || orderBook.asks.length === 0) && (
+                            <tr>
+                              <td colSpan="2" className="py-4 text-center text-gray-500">No asks available</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-xs text-gray-500 mt-4">
+                  Last updated: {orderBook.timestamp ? new Date(orderBook.timestamp).toLocaleString() : 'Unknown'} (Updates every 10 seconds)
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <div className="text-4xl mb-2">📊</div>
+                <p>No order book data available</p>
+              </div>
+            )}
           </div>
 
           {/* Trading Interface */}
