@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import PlaceBetForm from '@/components/trading/PlaceBetForm';
 
 // Dynamically import the PriceHistoryChart component with no SSR
 const PriceHistoryChart = dynamic(
@@ -18,11 +19,6 @@ const OpportunityDetailPage = () => {
   const [opportunity, setOpportunity] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [bidAmount, setBidAmount] = useState('');
-  const [bidThreshold, setBidThreshold] = useState('');
-  const [stopLossPrice, setStopLossPrice] = useState('');
-  const [autoSellPrice, setAutoSellPrice] = useState('');
-  const [bidPriceLength, setBidPriceLength] = useState('');
   const [priceHistory, setPriceHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState(null);
@@ -338,18 +334,7 @@ const OpportunityDetailPage = () => {
     );
   };
 
-  const handlePlaceOrder = () => {
-    // Placeholder for order placement logic
-    const orderDetails = {
-      bidAmount: parseFloat(bidAmount),
-      bidThreshold: parseFloat(bidThreshold),
-      stopLossPrice: stopLossPrice ? parseFloat(stopLossPrice) : null,
-      autoSellPrice: autoSellPrice ? parseFloat(autoSellPrice) : null,
-      bidPriceLength: bidPriceLength ? parseInt(bidPriceLength) : null
-    };
-    
-    alert(`Placing order with details: ${JSON.stringify(orderDetails, null, 2)}`);
-  };
+
 
 
 
@@ -630,6 +615,22 @@ const OpportunityDetailPage = () => {
         </div>
 
         {/* Trading Panel */}
+         {/* Trading Interface */}
+         <div className="rounded-lg shadow-sm border border-gray-200 p-6">
+            <PlaceBetForm
+              market={opportunity.market}
+              outcome={opportunity.outcome}
+              onSuccess={(position) => {
+                alert(`Position created successfully! ID: ${position.id}`);
+                // You could redirect to positions page or show success message
+                // router.push('/positions');
+              }}
+              showCard={false}
+              className=""
+            />
+          </div>
+
+
         <div className="space-y-6">
           {/* Order Book */}
           <div className="rounded-lg shadow-sm border border-gray-200 p-6">
@@ -719,96 +720,7 @@ const OpportunityDetailPage = () => {
             )}
           </div>
 
-          {/* Trading Interface */}
-          <div className="rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold mb-4">Place Order</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Bid Amount ($)
-                </label>
-                <input
-                  type="number"
-                  value={bidAmount}
-                  onChange={(e) => setBidAmount(e.target.value)}
-                  placeholder="100"
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Price Threshold (%)
-                </label>
-                <input
-                  type="number"
-                  value={bidThreshold}
-                  onChange={(e) => setBidThreshold(e.target.value)}
-                  placeholder="65"
-                  min="0"
-                  max="100"
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Stop Loss Price ($)
-                </label>
-                <input
-                  type="number"
-                  value={stopLossPrice}
-                  onChange={(e) => setStopLossPrice(e.target.value)}
-                  placeholder="Optional"
-                  min="0"
-                  step="0.01"
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Auto Sell Price ($)
-                </label>
-                <input
-                  type="number"
-                  value={autoSellPrice}
-                  onChange={(e) => setAutoSellPrice(e.target.value)}
-                  placeholder="Optional"
-                  min="0"
-                  step="0.01"
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Bid Price Length (days)
-                </label>
-                <input
-                  type="number"
-                  value={bidPriceLength}
-                  onChange={(e) => setBidPriceLength(e.target.value)}
-                  placeholder="Optional"
-                  min="1"
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <button
-                onClick={handlePlaceOrder}
-                disabled={!bidAmount || !bidThreshold}
-                className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Place Order
-              </button>
-              
-              <div className="text-xs text-gray-500 text-center">
-                This is a placeholder interface
-              </div>
-            </div>
-          </div>
-
+         
         
 
           {/* Opportunity Metadata */}

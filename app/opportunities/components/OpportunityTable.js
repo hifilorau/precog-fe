@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useRealTimePrices } from '../../../hooks/useRealTimePrices';
 
 const OpportunityTable = ({ 
   opportunities, 
@@ -12,6 +13,9 @@ const OpportunityTable = ({
 }) => {
   const [trackingStates, setTrackingStates] = useState({});
   const [trackingLoading, setTrackingLoading] = useState({});
+  
+  // Fetch real-time prices for all opportunities
+  const { currentPrices, loading: pricesLoading, error: pricesError, refreshPrices } = useRealTimePrices(opportunities);
 
   const formatPercentage = (value) => {
     if (value === null || value === undefined) return 'N/A';
@@ -142,14 +146,17 @@ const OpportunityTable = ({
     return true;
   });
 
-  if (loading && opportunities.length === 0) {
+  if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-        <div className="text-center">
-          <div className="text-lg text-gray-600">Loading opportunities...</div>
-        </div>
+      <div className="flex justify-center items-center h-64">
+        <div className="text-lg">Loading opportunities...</div>
       </div>
     );
+  }
+
+  // Show price error if there's an issue fetching real-time prices
+  if (pricesError) {
+    console.warn('Real-time price fetch error:', pricesError);
   }
 
   if (filteredOpportunities.length === 0 && opportunities.length > 0) {
@@ -172,7 +179,16 @@ const OpportunityTable = ({
                 Market / Outcome
               </th>
               <SortableHeader field="current_price">
-                Current Price
+                <div className="flex items-center space-x-2">
+                  <span>Price</span>
+                  <button
+                    onClick={refreshPrices}
+                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                    title="Refresh real-time prices"
+                  >
+                    ⟳
+                  </button>
+                </div>
               </SortableHeader>
               <SortableHeader field="magnitude">
                 Movement
@@ -202,10 +218,10 @@ const OpportunityTable = ({
           </thead>
           <tbody className="divide-y divide-gray-200">
             {filteredOpportunities.map((opportunity) => (
-              <tr key={opportunity.id} className="hover:bg-black hover:bg-opacity-50">
+              <tr key={opportunity.id} className="hover:bg-gray-500 bg-opacity-10">
                 <td className="px-6 py-4">
                   <div>
-                    <div className="text-sm font-medium text-white mb-1">
+                    <div className="text-sm font-medium  mb-1">
                       {opportunity.market?.name || 'Unknown Market'}
                     </div>
                     {opportunity.outcome && (
@@ -216,18 +232,55 @@ const OpportunityTable = ({
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <div className="text-sm font-medium text-white">
-                    {opportunity.outcome ? formatPercentage(opportunity.outcome.current_price) : formatPercentage(opportunity.market_probability)}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {opportunity.outcome ? 'Outcome' : 'Market'} price
-                  </div>
+                  {(() => {
+                    const capturedPrice = opportunity.outcome ? opportunity.outcome.current_price : opportunity.market_probability;
+                    const currentPrice = currentPrices.get(opportunity.id);
+                    const hasCurrentPrice = currentPrice !== undefined;
+                    const priceChange = hasCurrentPrice ? ((currentPrice - capturedPrice) / capturedPrice) * 100 : 0;
+                    const isPriceUp = priceChange > 0;
+                    const isPriceDown = priceChange < 0;
+                    
+                    return (
+                      <div className="space-y-1">
+                        {/* Current Price */}
+                        <div className="flex items-center space-x-2">
+                          <div className="text-sm font-medium">
+                            {hasCurrentPrice ? formatPercentage(currentPrice) : formatPercentage(capturedPrice)}
+                          </div>
+                          {hasCurrentPrice && Math.abs(priceChange) > 0.1 && (
+                            <div className={`text-xs px-1.5 py-0.5 rounded ${
+                              isPriceUp ? 'bg-green-100 text-green-700' : 
+                              isPriceDown ? 'bg-red-100 text-red-700' : 
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {isPriceUp ? '+' : ''}{priceChange.toFixed(1)}%
+                            </div>
+                          )}
+                          {pricesLoading && (
+                            <div className="text-xs text-gray-400">⟳</div>
+                          )}
+                        </div>
+                        
+                        {/* Captured Price (if different from current) */}
+                        {hasCurrentPrice && Math.abs(currentPrice - capturedPrice) > 0.001 && (
+                          <div className="text-xs text-gray-500">
+                            Captured: {formatPercentage(capturedPrice)}
+                          </div>
+                        )}
+                        
+                        {/* Price Type Label */}
+                        <div className="text-xs text-gray-500">
+                          {hasCurrentPrice ? 'Live' : 'Captured'} {opportunity.outcome ? 'outcome' : 'market'} price
+                        </div>
+                      </div>
+                    );
+                  })()} 
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center">
                     <span className="mr-2">{getDirectionIcon(opportunity.direction)}</span>
                     <div>
-                      <div className="text-sm font-medium text-white">
+                      <div className="text-sm font-medium ">
                         {formatMovement(opportunity.magnitude)}
                       </div>
                       <div className="text-xs text-gray-500">
@@ -236,11 +289,11 @@ const OpportunityTable = ({
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 text-sm text-white">
+                <td className="px-6 py-4 text-sm ">
                   {formatVolume(opportunity.market?.volume)}
                 </td>
                 <td className="px-6 py-4">
-                  <div className="text-sm font-medium text-white">
+                  <div className="text-sm font-medium ">
                     {(opportunity.opportunity_score * 100).toFixed(1)}%
                   </div>
                   {opportunity.confidence_score && (
@@ -252,10 +305,10 @@ const OpportunityTable = ({
                 <td className="px-6 py-4">
                   {getStatusBadge(opportunity.status)}
                 </td>
-                <td className="px-6 py-4 text-sm text-white">
+                <td className="px-6 py-4 text-sm">
                   {new Date(opportunity.created_at).toLocaleDateString()}
                 </td>
-                <td className="px-6 py-4 text-sm text-white">
+                <td className="px-6 py-4 text-sm">
                   {opportunity.market?.closes_at ? new Date(opportunity.market.closes_at).toLocaleDateString() : 'N/A'}
                 </td>
                 <td className="px-6 py-4">
