@@ -78,6 +78,17 @@ const OpportunityTable = ({
     if (direction === 'down') return '↘️';
     return '→';
   };
+  
+  // Special indicator for tipping point opportunities
+  const getTippingPointBadge = (opportunity) => {
+    if (opportunity.source !== 'tipping_point') return null;
+    
+    return (
+      <span className="px-2 py-1 ml-2 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+        Tipping Point
+      </span>
+    );
+  };
 
   const getStatusBadge = (status) => {
     const colors = {
@@ -234,7 +245,7 @@ const OpportunityTable = ({
                 <td className="px-6 py-4">
                   {(() => {
                     const capturedPrice = opportunity.outcome ? opportunity.outcome.current_price : opportunity.market_probability;
-                    const currentPrice = currentPrices.get(opportunity.id);
+                    const currentPrice = currentPrices.get(opportunity.outcome?.id);
                     const hasCurrentPrice = currentPrice !== undefined;
                     const priceChange = hasCurrentPrice ? ((currentPrice - capturedPrice) / capturedPrice) * 100 : 0;
                     const isPriceUp = priceChange > 0;
@@ -293,8 +304,11 @@ const OpportunityTable = ({
                   {formatVolume(opportunity.market?.volume)}
                 </td>
                 <td className="px-6 py-4">
-                  <div className="text-sm font-medium ">
-                    {(opportunity.opportunity_score * 100).toFixed(1)}%
+                  <div className="flex items-center">
+                    <div className="text-sm font-medium">
+                      {(opportunity.opportunity_score * 100).toFixed(1)}%
+                    </div>
+                    {getTippingPointBadge(opportunity)}
                   </div>
                   {opportunity.confidence_score && (
                     <div className="text-xs text-gray-500">
@@ -309,7 +323,24 @@ const OpportunityTable = ({
                   {new Date(opportunity.created_at).toLocaleDateString()}
                 </td>
                 <td className="px-6 py-4 text-sm">
-                  {opportunity.market?.closes_at ? new Date(opportunity.market.closes_at).toLocaleDateString() : 'N/A'}
+                  {opportunity.market?.closes_at ? (
+                    <div>
+                      <div>{new Date(opportunity.market.closes_at).toLocaleDateString()}</div>
+                      {opportunity.source === 'tipping_point' && (
+                        <div className="text-xs text-purple-700 font-medium">
+                          {(() => {
+                            const closingDate = new Date(opportunity.market.closes_at);
+                            const now = new Date();
+                            const diffTime = Math.abs(closingDate - now);
+                            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                            const diffHours = Math.floor((diffTime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                            
+                            return `Closing in ${diffDays}d ${diffHours}h`;
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  ) : 'N/A'}
                 </td>
                 <td className="px-6 py-4">
                   {(() => {

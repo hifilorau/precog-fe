@@ -3,14 +3,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
+import PriceHistoryCard from '../../markets/components/PriceHistoryCard';
+import OrderBook from '@/app/components/OrderBook';
+import OpportunityDetails from '../components/OpportunityDetails';
+import { formatPrice, formatVolume } from '@/app/utils/formatters';
 import PlaceBetForm from '@/components/trading/PlaceBetForm';
-
-// Dynamically import the PriceHistoryChart component with no SSR
-const PriceHistoryChart = dynamic(
-  () => import('@/app/markets/components/PriceHistoryChart'),
-  { ssr: false }
-);
 
 const OpportunityDetailPage = () => {
   const params = useParams();
@@ -22,46 +19,19 @@ const OpportunityDetailPage = () => {
   const [priceHistory, setPriceHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState(null);
-  const [orderBook, setOrderBook] = useState(null);
-  const [loadingOrderBook, setLoadingOrderBook] = useState(false);
-  const [orderBookError, setOrderBookError] = useState(null);
 
-  // Memoize fetchOrderBook to prevent infinite re-renders
-  const fetchOrderBook = useCallback(async (clobId) => {
-    if (!clobId) {
-      console.log('No CLOB ID provided to fetchOrderBook');
-      return;
-    }
-    
-    console.log(`Starting to fetch order book for CLOB ${clobId}`);
-    setLoadingOrderBook(true);
-    setOrderBookError(null);
-    
-    try {
-      const url = `https://clob.polymarket.com/book?token_id=${clobId}`;
-      console.log('Fetching order book from URL:', url);
-      
-      const response = await fetch(url, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to fetch order book: ${response.status} - ${errorText}`);
-      }
-      
-      const data = await response.json();
-      console.log('Received order book data:', data);
-      setOrderBook(data);
-    } catch (err) {
-      console.error('Error in fetchOrderBook:', err);
-      setOrderBookError(err.message || 'Failed to load order book');
-    } finally {
-      setLoadingOrderBook(false);
-    }
-  }, []);
+  const getDirectionIcon = (direction) => {
+    if (direction === 'up') return '↗️';
+    if (direction === 'down') return '↘️';
+    return '→';
+  };
+
+  const getPreviousPrice = (priceHistory) => {
+    if (!priceHistory || priceHistory.length < 2) return null;
+    // Sort by timestamp and get the price from the time window that triggered the alert
+    const sortedHistory = [...priceHistory].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    return sortedHistory[sortedHistory.length - 2]?.price; // Previous price before current
+  };
 
   // Memoize fetchPriceHistory to prevent infinite re-renders
   const fetchPriceHistory = useCallback(async (marketId) => {
@@ -189,31 +159,6 @@ const OpportunityDetailPage = () => {
     };
   }, [fetchOpportunity]);
 
-  // Fetch order book data when opportunity is loaded and poll every 10 seconds
-  useEffect(() => {
-    const clobId = opportunity?.outcome?.clob_id;
-    if (!clobId) {
-      console.log('No CLOB ID found in opportunity outcome');
-      return;
-    }
-    
-    console.log(`Setting up order book polling for CLOB ID: ${clobId}`);
-    
-    // Initial fetch
-    fetchOrderBook(clobId);
-    
-    // Set up polling interval
-    const intervalId = setInterval(() => {
-      fetchOrderBook(clobId);
-    }, 10000); // 10 seconds
-    
-    // Clean up on unmount
-    return () => {
-      console.log('Cleaning up order book polling');
-      clearInterval(intervalId);
-    };
-  }, [opportunity, fetchOrderBook]);
-
   // Fetch price history when opportunity data is loaded
   useEffect(() => {
     const marketId = opportunity?.market_id || opportunity?.market?.id;
@@ -241,83 +186,6 @@ const OpportunityDetailPage = () => {
     };
   }, [opportunity?.market_id, opportunity?.market?.id, fetchPriceHistory]);
 
-  const formatPercentage = (value) => {
-    if (value === null || value === undefined) return 'N/A';
-    return `${(value * 100).toFixed(2)}%`;
-  };
-
-  const formatVolume = (volume) => {
-    if (!volume) return 'N/A';
-    if (volume >= 1000000) return `$${(volume / 1000000).toFixed(1)}M`;
-    if (volume >= 1000) return `$${(volume / 1000).toFixed(1)}K`;
-    return `$${volume.toFixed(0)}`;
-  };
-
-  const getDirectionIcon = (direction) => {
-    if (direction === 'up') return '↗️';
-    if (direction === 'down') return '↘️';
-    return '→';
-  };
-
-  const getPreviousPrice = (priceHistory) => {
-    if (!priceHistory || priceHistory.length < 2) return null;
-    // Sort by timestamp and get the price from the time window that triggered the alert
-    const sortedHistory = [...priceHistory].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    return sortedHistory[sortedHistory.length - 2]?.price; // Previous price before current
-  };
-
-  const renderMiniChart = (priceHistory) => {
-    if (!priceHistory || priceHistory.length < 2) {
-      return (
-        <div className="h-16 flex items-center justify-center text-gray-400 text-sm">
-          No price history available
-        </div>
-      );
-    }
-
-    const sortedHistory = [...priceHistory].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    const prices = sortedHistory.map(p => p.price);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    const priceRange = maxPrice - minPrice || 0.01; // Avoid division by zero
-
-    // Create SVG path for the line chart
-    const width = 200;
-    const height = 60;
-    const points = prices.map((price, index) => {
-      const x = (index / (prices.length - 1)) * width;
-      const y = height - ((price - minPrice) / priceRange) * height;
-      return `${x},${y}`;
-    }).join(' ');
-
-    return (
-      <div className="h-16 flex items-center">
-        <svg width={width} height={height} className="overflow-visible">
-          <polyline
-            fill="none"
-            stroke="#3B82F6"
-            strokeWidth="2"
-            points={points}
-          />
-          {/* Add dots for data points */}
-          {prices.map((price, index) => {
-            const x = (index / (prices.length - 1)) * width;
-            const y = height - ((price - minPrice) / priceRange) * height;
-            return (
-              <circle
-                key={index}
-                cx={x}
-                cy={y}
-                r="2"
-                fill="#3B82F6"
-              />
-            );
-          })}
-        </svg>
-      </div>
-    );
-  };
-
   const getStatusBadge = (status) => {
     const colors = {
       active: 'bg-green-100 text-green-800',
@@ -333,10 +201,6 @@ const OpportunityDetailPage = () => {
       </span>
     );
   };
-
-
-
-
 
   if (loading) {
     return (
@@ -398,104 +262,42 @@ const OpportunityDetailPage = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Left side - Outcome Info */}
                 <div>
-                  <div className="mb-4">
-                    <h2 className="text-2xl font-bold text-white mb-2">
-                      {opportunity.outcome.name}
-                    </h2>
-                    <p className="text-gray-400 text-sm leading-relaxed">
-                      {opportunity.market?.question}
-                    </p>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div className="rounded-lg p-3 border border-blue-200">
-                      <div className="text-xs text-gray-500 mb-1">Current Price</div>
-                      <div className="text-xl font-bold text-blue-600">
-                        {formatPercentage(opportunity.outcome.current_price)}
-                      </div>
-                    </div>
-                    <div className="rounded-lg p-3 border border-blue-200">
-                      <div className="text-xs text-gray-500 mb-1">Previous Price</div>
-                      <div className="text-xl font-bold text-gray-600">
-                        {getPreviousPrice(opportunity.outcome.price_history) 
-                          ? formatPercentage(getPreviousPrice(opportunity.outcome.price_history))
-                          : 'N/A'
-                        }
-                      </div>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center space-x-4 text-sm">
-                    <div className="flex items-center">
-                      <span className="mr-1">{getDirectionIcon(opportunity.direction)}</span>
-                      <span className="font-medium text-gray-700">
-                        {formatPercentage(opportunity.magnitude)} movement
-                      </span>
-                    </div>
-                    <div className="text-gray-500">
-                      {opportunity.window} window
-                    </div>
+                <div className="mb-6">
+                  <OpportunityDetails 
+                    opportunity={opportunity}
+                    getPreviousPrice={getPreviousPrice}
+                    getDirectionIcon={getDirectionIcon}
+                  />
+                </div>
+                
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold mb-4">Order Book</h3>
+                  <div className="border border-gray-200 rounded-lg p-4 bg-white">
+                    <OrderBook 
+                      clobId={opportunity?.outcome?.clob_id}
+                      market={opportunity?.market}
+                      outcome={opportunity?.outcome}
+                    />
                   </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2 text-sm">
-                    <div className="px-3 py-1 rounded-full border">
-                      <span className="text-gray-600">Volume: </span>
-                      <span className="font-medium">{formatVolume(opportunity.outcome.current_volume || opportunity.market?.volume)}</span>
-                    </div>
-                    <div className="px-3 py-1 rounded-full border border-blue-200">
-                      <span className="text-gray-600">Status: </span>
-                      <span className="font-medium capitalize">{opportunity.market?.status || 'Unknown'}</span>
-                    </div>
-                  </div>
-
-                  {opportunity.market?.url && (
-                    <div className="mt-4">
-                      <a
-                        href={opportunity.market.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        View on Polymarket →
-                      </a>
-                    </div>
-                  )}
                 </div>
 
                 {/* Right side - Price Chart */}
-                    {/* Price History */}
-                <div className="mt-8">
-                    <h2 className="text-xl font-semibold mb-4">Price History</h2>
-                    {loadingHistory ? (
-                    <div className="flex justify-center items-center h-64">
-                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-                    </div>
-                    ) : historyError ? (
-                    <div className="text-red-500 p-4 border rounded">
-                        Error loading price history: {historyError}
-                    </div>
-                    ) : priceHistory && priceHistory.outcomes ? (
-                    <div className="space-y-4">
-                        <div className="border rounded p-4">
-                        <div className="h-[400px] w-full">
-                            <PriceHistoryChart 
-                            data={priceHistory} 
-                            highlightOutcomeId={opportunity?.outcome_id} 
-                            />
-                        </div>
-                        </div>
-                        <div className="text-xs text-gray-500">
-                        Showing price history for the last 30 days
-                        </div>
-                    </div>
-                    ) : (
-                    <div className="text-center py-8 text-gray-500">
-                        <div className="text-4xl mb-2">📊</div>
-                        <p>No price history data available</p>
-                    </div>
-                    )}
+                 {/* Order Book */}
+               
                 </div>
-
+                {/* Price History */}
+                 <div className="mt-8">
+                    <h2 className="text-xl font-semibold mb-4">Price History</h2>
+                    <PriceHistoryCard
+                      priceHistory={priceHistory}
+                      priceHistoryLoading={loadingHistory}
+                      handleIntervalChange={() => {}} // Add appropriate handler if needed
+                      market={opportunity?.market}
+                      showOnlyHighlighted={true}
+                      highlightedOutcomeId={opportunity?.outcome?.name} // Use name instead of ID
+                    />
+                </div>
 
               </div>
             </div>
@@ -509,7 +311,7 @@ const OpportunityDetailPage = () => {
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
               <div className="text-center p-4 border border-blue-200">
                 <div className="text-2xl font-bold text-blue-900">
-                  {opportunity.outcome ? formatPercentage(opportunity.outcome.current_price) : formatPercentage(opportunity.market_probability)}
+                  {opportunity.outcome ? formatPrice(opportunity.outcome.current_price) : formatPrice(opportunity.market_probability)}
                 </div>
                 <div className="text-sm text-blue-700 font-medium">Current Price</div>
                 <div className="text-xs text-blue-600 mt-1">
@@ -518,7 +320,7 @@ const OpportunityDetailPage = () => {
               </div>
               <div className="text-center p-4 border border-gray-200">
                 <div className="text-2xl font-bold text-gray-900">
-                  {formatPercentage(opportunity.magnitude)}
+                  {formatPrice(opportunity.magnitude)}
                 </div>
                 <div className="text-sm text-gray-600">Price Movement</div>
                 <div className="text-xs text-gray-500 mt-1">
@@ -539,7 +341,7 @@ const OpportunityDetailPage = () => {
               </div>
               <div className="text-center p-4 border">
                 <div className="text-2xl font-bold text-gray-900">
-                  {formatPercentage(opportunity.divergence)}
+                  {formatPrice(opportunity.divergence)}
                 </div>
                 <div className="text-sm text-gray-600">Divergence</div>
               </div>
@@ -558,7 +360,7 @@ const OpportunityDetailPage = () => {
                   <label className="block text-sm font-medium text-gray-700">Target Outcome</label>
                   <div className="text-sm text-gray-900 font-medium">{opportunity.outcome.name}</div>
                   <div className="text-lg font-bold text-blue-600 mt-1">
-                    Current Price: {formatPercentage(opportunity.outcome.current_price)}
+                    Current Price: {formatPrice(opportunity.outcome.current_price)}
                   </div>
                   {opportunity.outcome.current_volume && (
                     <div className="text-sm text-gray-600">
@@ -600,7 +402,7 @@ const OpportunityDetailPage = () => {
                       </div>
                       <div className="text-right">
                         <div className="text-lg font-semibold text-gray-900">
-                          {formatPercentage(outcome.current_price)}
+                          {formatPrice(outcome.current_price)}
                         </div>
                         <div className="text-sm text-gray-600">
                           Vol: {formatVolume(outcome.current_volume)}
@@ -628,97 +430,11 @@ const OpportunityDetailPage = () => {
               showCard={false}
               className=""
             />
-          </div>
+        </div>
 
 
         <div className="space-y-6">
-          {/* Order Book */}
-          <div className="rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold mb-4">Order Book</h3>
-            {loadingOrderBook && !orderBook ? (
-              <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-              </div>
-            ) : orderBookError ? (
-              <div className="text-red-500 p-4 border rounded">
-                Error loading order book: {orderBookError}
-              </div>
-            ) : orderBook ? (
-              <div className="border rounded p-4">
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Bids */}
-                  <div>
-                    <h3 className="text-lg font-medium mb-2 text-green-600">Bids</h3>
-                    <div className="overflow-y-auto max-h-[300px]">
-                      <table className="min-w-full">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="py-2 px-4 text-left">Price</th>
-                            <th className="py-2 px-4 text-right">Size</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {orderBook.bids
-                            ?.sort((a, b) => b.price - a.price)
-                            .slice(0, 10)
-                            .map((bid, index) => (
-                              <tr key={index} className="border-b hover:bg-gray-50">
-                                <td className="py-2 px-4 text-green-600">{(bid.price * 100).toFixed(2)}%</td>
-                                <td className="py-2 px-4 text-right">{bid.size}</td>
-                              </tr>
-                            ))}
-                          {(!orderBook.bids || orderBook.bids.length === 0) && (
-                            <tr>
-                              <td colSpan="2" className="py-4 text-center text-gray-500">No bids available</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  
-                  {/* Asks */}
-                  <div>
-                    <h3 className="text-lg font-medium mb-2 text-red-600">Asks</h3>
-                    <div className="overflow-y-auto max-h-[300px]">
-                      <table className="min-w-full">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="py-2 px-4 text-left">Price</th>
-                            <th className="py-2 px-4 text-right">Size</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {orderBook.asks
-                            ?.sort((a, b) => a.price - b.price)
-                            .slice(0, 10)
-                            .map((ask, index) => (
-                              <tr key={index} className="border-b hover:bg-gray-50">
-                                <td className="py-2 px-4 text-red-600">{(ask.price * 100).toFixed(2)}%</td>
-                                <td className="py-2 px-4 text-right">{ask.size}</td>
-                              </tr>
-                            ))}
-                          {(!orderBook.asks || orderBook.asks.length === 0) && (
-                            <tr>
-                              <td colSpan="2" className="py-4 text-center text-gray-500">No asks available</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-xs text-gray-500 mt-4">
-                  Last updated: {orderBook.timestamp ? new Date(orderBook.timestamp).toLocaleString() : 'Unknown'} (Updates every 10 seconds)
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <div className="text-4xl mb-2">📊</div>
-                <p>No order book data available</p>
-              </div>
-            )}
-          </div>
+         
 
          
         

@@ -8,6 +8,7 @@ import styles from './PriceHistoryChart.module.css';
 interface PriceHistoryChartProps {
   data: PriceHistoryResponse;
   highlightOutcomeId?: string | number;
+  showOnlyHighlighted?: boolean;
 }
 
 // Define a type for the structured data points for the chart
@@ -32,17 +33,54 @@ const CHART_COLORS = [
   '#F7B801', // Gold
 ];
 
-const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ data, highlightOutcomeId }) => {
+const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ 
+  data, 
+  highlightOutcomeId,
+  showOnlyHighlighted = false 
+}) => {
+  console.log('PriceHistoryChart - Props:', { data, highlightOutcomeId, showOnlyHighlighted });
+  
+  if (!data || !data.outcomes || Object.keys(data.outcomes).length === 0) {
+    console.log('No outcomes data available');
+    return <p className="text-gray-500">No price history available to chart.</p>;
+  }
   if (!data || !data.outcomes || Object.keys(data.outcomes).length === 0) {
     return <p className="text-gray-500">No price history available to chart.</p>;
   }
+
+  // Filter outcomes if showOnlyHighlighted is true and we have a highlightOutcomeId
+  const filteredOutcomes = showOnlyHighlighted && highlightOutcomeId
+    ? Object.fromEntries(
+        Object.entries(data.outcomes).filter(([key, outcome]) => 
+          key === highlightOutcomeId.toString() || 
+          outcome.name === highlightOutcomeId.toString() ||
+          key.toLowerCase() === highlightOutcomeId.toString().toLowerCase() ||
+          outcome.name?.toLowerCase() === highlightOutcomeId.toString().toLowerCase()
+        )
+      )
+    : data.outcomes;
+    
+  console.log('Filtered outcomes:', {
+    showOnlyHighlighted,
+    highlightOutcomeId,
+    allOutcomeKeys: Object.keys(data.outcomes),
+    allOutcomeNames: Object.values(data.outcomes).map(o => o.name),
+    filteredOutcomeKeys: Object.keys(filteredOutcomes)
+  });
+    
+  console.log('Filtered outcomes:', {
+    showOnlyHighlighted,
+    highlightOutcomeId,
+    allOutcomeIds: Object.keys(data.outcomes),
+    filteredOutcomeIds: Object.keys(filteredOutcomes)
+  });
 
   // We need to transform the data into a format that recharts can easily use.
   // The goal is an array of objects, where each object represents a point in time
   // and has a key for each outcome's price at that time.
 
   const allTimestamps = new Set<string>();
-  Object.values(data.outcomes).forEach(outcome => {
+  Object.values(filteredOutcomes).forEach(outcome => {
     outcome.prices.forEach(pricePoint => {
       allTimestamps.add(new Date(pricePoint.timestamp).toISOString());
     });
@@ -52,7 +90,7 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ data, highlightOu
 
   const chartData: ChartDataPoint[] = sortedTimestamps.map(timestamp => {
     const dataPoint: ChartDataPoint = { timestamp };
-    Object.values(data.outcomes).forEach(outcome => {
+    Object.values(filteredOutcomes).forEach(outcome => {
       const pricePoint = outcome.prices.find(p => new Date(p.timestamp).toISOString() === timestamp);
       // Type guard to ensure 'price' exists
       if (pricePoint && 'price' in pricePoint) {
@@ -64,11 +102,23 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ data, highlightOu
     return dataPoint;
   });
 
-  const outcomes = Object.entries(data.outcomes).map(([id, outcome]) => ({
-    id,
-    name: outcome.name,
-    isHighlighted: id === highlightOutcomeId?.toString()
-  }));
+  const outcomes = Object.entries(filteredOutcomes).map(([id, outcome]) => {
+    const isHighlighted = id === highlightOutcomeId?.toString() || 
+                         outcome.name === highlightOutcomeId?.toString() ||
+                         id.toLowerCase() === highlightOutcomeId?.toString().toLowerCase() ||
+                         outcome.name?.toLowerCase() === highlightOutcomeId?.toString().toLowerCase();
+    console.log(`Outcome ${id} (${outcome.name}):`, {
+      isHighlighted,
+      pricePoints: outcome.prices?.length || 0,
+      firstFewPrices: outcome.prices?.slice(0, 3)
+    });
+    
+    return {
+      id,
+      name: outcome.name,
+      isHighlighted
+    };
+  });
 
   return (
     <ResponsiveContainer width="100%" height={400}>

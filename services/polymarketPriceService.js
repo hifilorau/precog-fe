@@ -125,7 +125,7 @@ class PolymarketPriceService {
   /**
    * Get current prices for opportunities
    * @param {Array} opportunities - Array of opportunity objects
-   * @returns {Promise<Map>} Map of opportunity.id -> current price
+   * @returns {Promise<Map>} Map of outcome.id -> current price
    */
   async getOpportunityPrices(opportunities) {
     const tokenParams = [];
@@ -133,9 +133,11 @@ class PolymarketPriceService {
     for (const opp of opportunities) {
       // Try to get CLOB token ID from outcome or market
       let tokenId = null;
+      let outcomeId = null;
       
       if (opp.outcome && opp.outcome.clob_id) {
         tokenId = opp.outcome.clob_id;
+        outcomeId = opp.outcome.id;
       } else if (opp.market && opp.market.outcomes && opp.market.outcomes.length > 0) {
         // Find the outcome that matches this opportunity
         const matchingOutcome = opp.market.outcomes.find(outcome => 
@@ -145,14 +147,15 @@ class PolymarketPriceService {
         
         if (matchingOutcome && matchingOutcome.clob_id) {
           tokenId = matchingOutcome.clob_id;
+          outcomeId = matchingOutcome.id;
         }
       }
 
-      if (tokenId) {
+      if (tokenId && outcomeId) {
         tokenParams.push({
           tokenId,
           side: 'buy', // Get buy price for current market price
-          opportunityId: opp.id
+          outcomeId: outcomeId
         });
       }
     }
@@ -162,11 +165,11 @@ class PolymarketPriceService {
     const priceMap = await this.getPrices(tokenParams);
     const opportunityPrices = new Map();
 
-    // Map prices back to opportunity IDs
+    // Map prices back to outcome IDs
     for (const param of tokenParams) {
       const price = priceMap.get(param.tokenId);
       if (price !== undefined) {
-        opportunityPrices.set(param.opportunityId, price);
+        opportunityPrices.set(param.outcomeId, price);
       }
     }
 

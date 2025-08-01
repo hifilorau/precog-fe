@@ -6,12 +6,15 @@ import { Button } from '@/components/ui/button'
 import { Plus, RefreshCw } from 'lucide-react'
 import PositionsTable from './components/PositionsTable'
 import PlaceBetForm from './components/PlaceBetForm'
+import PositionDetails from './components/PositionDetails'
 
 export default function PositionsPage() {
   const [showPlaceBetForm, setShowPlaceBetForm] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [selectedMarket, setSelectedMarket] = useState(null)
   const [selectedOutcome, setSelectedOutcome] = useState(null)
+  const [selectedPositionId, setSelectedPositionId] = useState(null)
+  const [showPositionDetails, setShowPositionDetails] = useState(false)
 
   const handlePlaceBetSuccess = (position) => {
     setShowPlaceBetForm(false)
@@ -25,6 +28,16 @@ export default function PositionsPage() {
     setRefreshTrigger(prev => prev + 1)
   }
 
+  const handleViewPositionDetails = (positionId) => {
+    setSelectedPositionId(positionId)
+    setShowPositionDetails(true)
+  }
+
+  const handleClosePositionDetails = () => {
+    setShowPositionDetails(false)
+    setSelectedPositionId(null)
+  }
+
   // Mock data for demonstration - in real app, this would come from props or context
   const mockMarket = {
     id: 'mock-market-id',
@@ -36,6 +49,17 @@ export default function PositionsPage() {
     id: 'mock-outcome-id',
     name: 'Yes',
     probability: 0.65
+  }
+
+  if (showPositionDetails && selectedPositionId) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <PositionDetails
+          positionId={selectedPositionId}
+          onClose={handleClosePositionDetails}
+        />
+      </div>
+    )
   }
 
   if (showPlaceBetForm) {
@@ -122,7 +146,10 @@ export default function PositionsPage() {
       </div>
 
       {/* Positions Table */}
-      <PositionsTable refreshTrigger={refreshTrigger} />
+      <PositionsTable 
+        refreshTrigger={refreshTrigger} 
+        onViewDetails={handleViewPositionDetails}
+      />
 
       {/* Information Card */}
       <Card className="bg-blue-50 border-blue-200">

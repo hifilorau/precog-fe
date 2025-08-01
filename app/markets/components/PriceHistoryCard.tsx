@@ -3,12 +3,6 @@
 import { PriceHistoryResponse } from '@/lib/types/markets';
 import PriceHistoryChart from './PriceHistoryChart';
 
-interface PriceHistoryCardProps {
-  priceHistory: PriceHistoryResponse | null;
-  priceHistoryLoading: boolean;
-  handleIntervalChange: (interval: 'raw' | 'hour' | 'day' | 'week') => void;
-}
-
 import { Market } from '@/lib/types/markets';
 
 interface PriceHistoryCardProps {
@@ -16,6 +10,8 @@ interface PriceHistoryCardProps {
   priceHistoryLoading: boolean;
   handleIntervalChange: (interval: 'raw' | 'hour' | 'day' | 'week') => void;
   market?: Market | null;
+  showOnlyHighlighted?: boolean;
+  highlightedOutcomeId?: string | number;
 }
 
 export default function PriceHistoryCard({
@@ -23,7 +19,16 @@ export default function PriceHistoryCard({
   priceHistoryLoading,
   handleIntervalChange,
   market,
+  showOnlyHighlighted = false,
+  highlightedOutcomeId,
 }: PriceHistoryCardProps) {
+  console.log('PriceHistoryCard - Props:', {
+    priceHistory,
+    priceHistoryLoading,
+    market,
+    showOnlyHighlighted,
+    highlightedOutcomeId
+  });
   // Patch the price history with the freshest outcome price if needed
   let patchedPriceHistory = priceHistory;
   if (priceHistory && market && market.outcomes && priceHistory.outcomes) {
@@ -74,7 +79,11 @@ export default function PriceHistoryCard({
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
         </div>
       ) : patchedPriceHistory ? (
-        <PriceHistoryChart data={patchedPriceHistory} />
+        <PriceHistoryChart 
+          data={patchedPriceHistory} 
+          highlightOutcomeId={highlightedOutcomeId}
+          showOnlyHighlighted={showOnlyHighlighted}
+        />
       ) : (
         <p className="text-muted-foreground">No price history available.</p>
       )}

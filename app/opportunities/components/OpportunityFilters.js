@@ -42,6 +42,7 @@ const OpportunityFilters = ({ filters, onFilterChange }) => {
             <option value="price_trend">Price Trend</option>
             <option value="news">News</option>
             <option value="llm_analysis">LLM Analysis</option>
+            <option value="tipping_point">Tipping Point</option>
             <option value="manual">Manual</option>
           </select>
         </div>
