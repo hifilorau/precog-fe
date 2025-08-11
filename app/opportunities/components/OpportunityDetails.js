@@ -6,7 +6,7 @@ export default function OpportunityDetails({ opportunity, getPreviousPrice, getD
   return (
     <div className="opportunity-details">
       <div className="mb-4">
-        <h2 className="text-2xl font-bold text-white mb-2">
+        <h2 className="text-2xl font-bold mb-2">
           {opportunity.outcome.name}
         </h2>
         <p className="text-gray-400 text-sm leading-relaxed">

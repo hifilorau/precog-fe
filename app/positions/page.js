@@ -1,14 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus, RefreshCw } from 'lucide-react'
+import { AllowanceProvider } from '@/hooks/useAllowances'
 import PositionsTable from './components/PositionsTable'
 import PlaceBetForm from './components/PlaceBetForm'
 import PositionDetails from './components/PositionDetails'
+import useUserPositions from '@/hooks/useUserPositions'
 
-export default function PositionsPage() {
+function PositionsPageContent() {
   const [showPlaceBetForm, setShowPlaceBetForm] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [selectedMarket, setSelectedMarket] = useState(null)
@@ -27,6 +29,19 @@ export default function PositionsPage() {
   const handleRefresh = () => {
     setRefreshTrigger(prev => prev + 1)
   }
+
+  // Call the hook at the top level of the component
+  const { positions, loading, error } = useUserPositions();
+
+  useEffect(() => {
+    if (loading) {
+      console.log('Loading positions...')
+    } else if (error) {
+      console.error('Error fetching positions:', error)
+    } else {
+      console.log('User positions:', positions)
+    }
+  }, [positions, loading, error])
 
   const handleViewPositionDetails = (positionId) => {
     setSelectedPositionId(positionId)
@@ -61,6 +76,8 @@ export default function PositionsPage() {
       </div>
     )
   }
+
+
 
   if (showPlaceBetForm) {
     return (
@@ -149,6 +166,7 @@ export default function PositionsPage() {
       <PositionsTable 
         refreshTrigger={refreshTrigger} 
         onViewDetails={handleViewPositionDetails}
+        polyPositions={positions}
       />
 
       {/* Information Card */}
@@ -164,12 +182,20 @@ export default function PositionsPage() {
               </h3>
               <p className="text-blue-700 text-sm mt-1">
                 Set stop loss and sell target prices when placing bets. Our system will automatically 
-                monitor prices and execute trades when your conditions are met, even when you're not online.
+                monitor prices and execute trades when your conditions are met, even when you are not online.
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function PositionsPage() {
+  return (
+    <AllowanceProvider>
+      <PositionsPageContent />
+    </AllowanceProvider>
   )
 }

@@ -1,254 +1,379 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from '@/components/ui/table'
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
-  Clock, 
-  Target,
-  Shield,
-  Loader2,
-  RefreshCw
-} from 'lucide-react'
-import { useRealTimePrices } from '../../../hooks/useRealTimePrices'
+import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock } from 'lucide-react'
+import { v4 as uuidv4 } from 'uuid';
 
-export default function PositionsTable({ refreshTrigger = 0, onViewDetails }) {
-  const [positions, setPositions] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+import {
+  formatPrice,
+  formatVolume,
+  calculatePnL,
+  getCurrentPrice,
+  getStatusBadge,
+  getStopLossRiskLevel,
+  formatPnL,
+} from '@/app/utils/formatters'
+import useAllowances from '@/hooks/useAllowances'
+import { useRealTimePrices } from '@/hooks/useRealTimePrices'
+
+export default function PositionsTable({ refreshTrigger = 0, onViewDetails, polyPositions = [] }) {
   const [sellingPosition, setSellingPosition] = useState(null)
-  
-  // Transform positions to match the format expected by useRealTimePrices
-  const positionOpportunities = useMemo(() => {
-    return positions
-      .filter(position => position.outcome) // Only include positions with outcome data
-      .map(position => ({
-        id: position.id, // Keep position ID for reference
-        market_id: position.market?.id,
-        market: position.market,
-        outcome: position.outcome,
-        outcome_id: position.outcome.id, // This is what will be used as the key for price lookup
-        // Add any other required fields for price lookup
-      }));
-  }, [positions]);
+  const [cancelingPosition, setCancelingPosition] = useState(null)
+  const [redeemingPosition, setRedeemingPosition] = useState(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [redeemablePositions, setRedeemablePositions] = useState([])
 
-  // Use the real-time prices hook
-  const { currentPrices, loading: pricesLoading, refreshPrices } = 
-    useRealTimePrices(positionOpportunities);
 
-  const fetchPositions = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch('http://localhost:8000/api/v1/positions/')
-      console.log(response)
-      if (!response.ok) {
-        throw new Error('Failed to fetch positions')
+  // Allowance context (for USDC and CTFC)
+  const { allowances, checkAllowances } = useAllowances()
+  const [mergedPositions, setMergedPositions] = useState([])
+  // Real-time price context
+  const {
+    pricesLoading,
+    refreshPrices,
+  } = useRealTimePrices()
+
+  // Derive positions to show with a strict filter on zero-value closed/resolved-lost
+  const allPositions = Array.isArray(mergedPositions) ? mergedPositions : []
+  // TODO: add a UI toggle to include closed/lost zero-value positions
+  const shouldHidePosition = (p) => {
+    const cp = Number(getCurrentPrice(p))
+    const hasZeroPrice = !Number.isNaN(cp) && cp === 0
+    const hasZeroValue = Number(p?.currentValue ?? p?.current_value) === 0
+    const isClosed = p?.market?.status === 'closed'
+    const isResolvedLost = p?.resolved_status === 'lost' || isClosed
+    return (hasZeroPrice || hasZeroValue) && isResolvedLost
+  }
+  const positionsToShow = allPositions.filter(p => !shouldHidePosition(p))
+
+  // Helper to normalize and derive fields on a merged position
+  const mergePositions = (poly = [], backend = []) => {
+    const normalize = (p) => {
+      // Build market object from nested or flat fields; don't wipe existing fields
+      const hasMarket = p?.market && Object.keys(p.market).length > 0
+      const market = hasMarket
+        ? p.market
+        : {
+            id: p.market_id ?? undefined,
+            question: p.market_name ?? undefined,
+            slug: p.market_slug ?? undefined,
+            status: p.market_status ?? undefined,
+          }
+
+      // Keep Poly string outcome if present; otherwise build from flat fields
+      let outcome = p?.outcome
+      if (outcome == null && (p.outcome_id || p.outcome_name)) {
+        outcome = {
+          id: p.outcome_id ?? undefined,
+          name: p.outcome_name ?? undefined,
+          current_price: p.current_price ?? undefined,
+          probability: p.outcome_probability ?? undefined,
+        }
       }
-      
-      const data = await response.json()
-      
-      // Filter duplicate outcomes - use only the most recently updated ones
-      const processedData = data.map(position => {
-        if (position.market && position.market.outcomes && position.market.outcomes.length > 0) {
-          // Group outcomes by clob_id (unique identifier)
-          const outcomeGroups = position.market.outcomes.reduce((groups, outcome) => {
-            const key = outcome.clob_id || outcome.external_id || outcome.name
-            if (!groups[key] || new Date(outcome.updated_at) > new Date(groups[key].updated_at)) {
-              groups[key] = outcome
-            }
-            return groups
-          }, {})
-          
-          // Use only the most recent outcomes
-          position.market.outcomes = Object.values(outcomeGroups)
-          
-          // Find the current position's outcome and use the most recent version
-          // First try to find by ID, then by clob_id (in case the ID changed after deduplication)
-          let currentOutcome = position.market.outcomes.find(o => o.id === position.outcome_id)
-          
-          if (!currentOutcome && position.outcome?.clob_id) {
-            // If not found by ID, find by clob_id (handles deduplicated outcomes)
-            currentOutcome = position.market.outcomes.find(o => o.clob_id === position.outcome.clob_id)
-          }
-          
-          if (currentOutcome) {
-            console.log(`Updating outcome for position ${position.id}: ${position.outcome?.current_price} -> ${currentOutcome.current_price}`)
-            position.outcome = currentOutcome
-          }
-        }
-        
-        // Update position status based on market resolution
-        if (position.market && position.market.status === 'closed') {
-          // Check if this position was never filled (no actual trade)
-          // Use volume and entry_price as primary indicators, since filled_at might be missing due to data issues
-          const wasNeverFilled = (position.volume === 0 || position.volume === null) && 
-                                (position.entry_price === 0 || position.entry_price === null)
-          
-          if (wasNeverFilled) {
-            position.resolved_status = 'not_filled'
-          } else {
-            // Check if this is a resolved market with final prices
-            const resolvedOutcome = position.market.outcomes.find(o => o.current_price === 1.0)
-            if (resolvedOutcome) {
-              position.market.resolved_at = position.market.updated_at // Use market update time as resolution time
-              position.resolved_status = position.outcome_id === resolvedOutcome.id ? 'won' : 'lost'
-            }
-          }
-        }
-        
-        return position
-      })
-      
-      setPositions(processedData)
-      setError('')
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
+
+      return {
+        ...p,
+        market,
+        // keep outcome as-is; don't force {} to avoid rendering objects
+        outcome: outcome ?? undefined,
+      }
     }
+
+    const computeDerived = (pos) => {
+      console.log('Computing derived position:', pos.currentValue)
+      // Preserve backend-provided current_value
+      if (pos.currentValue == null && pos.current_value != null) {
+        pos.currentValue = 0
+      }
+      const cp = getCurrentPrice(pos)
+      const sizeOrVol = pos.size ?? pos.volume
+      if (pos.currentValue == null && cp != null && sizeOrVol != null) {
+        pos.currentValue = Number(sizeOrVol) * Number(cp)
+      }
+      if (pos.redeemable == null) {
+        const hasRedemptionRecord = Array.isArray(pos.redemptions) && pos.redemptions.some(r => r.status === 'completed')
+        pos.redeemable = pos.resolved_status === 'won' && !hasRedemptionRecord
+      }
+      return pos
+    }
+
+    const keyFor = (p) =>
+      // Prefer clob_id (backend) and asset/conditionId (poly) to align the same instrument
+      p?.id  ||
+      p?.clob_id ||
+      p?.asset ||
+      p?.conditionId ||
+      `${p?.market?.id || ''}-${(p?.outcome && p?.outcome.id) || p?.outcome_id || ''}-${p?.slug || p?.market_slug || ''}`
+
+    const map = new Map()
+    const backendByClob = new Map()
+
+    // Seed with backend (authoritative) and index by clob_id
+    backend.forEach(b => {
+      const nb = computeDerived(normalize({ ...b, isDataApi: false }))
+      const kb = keyFor(nb)
+      map.set(kb, nb)
+      if (b?.clob_id) backendByClob.set(String(b.clob_id), { key: kb, value: nb })
+    })
+
+    // Adapt a poly record into our unified shape to fill missing fields (top-level only)
+    const adaptFromPoly = (polyRec, base = {}) => {
+      const out = { ...base }
+
+      // Required: conditionId as asset
+      if (polyRec.conditionId) out.conditionId = polyRec.conditionId
+      else if (out.asset == null && polyRec.asset) out.asset = polyRec.asset
+      if (out.clob_id == null) out.clob_id = polyRec.asset
+      // Required fields on top-level
+      if (out.size == null && polyRec.size != null) out.size = polyRec.size
+      if (out.negativeRisk == null && polyRec.negativeRisk != null) out.negativeRisk = polyRec.negativeRisk
+      if (polyRec.redeemable != null) out.redeemable = polyRec.redeemable
+      if (out.total_pnl == null && polyRec.cashPnl != null) out.total_pnl = Number(polyRec.cashPnl)
+      if (polyRec.cashPnl != null) out.cashPnl = Number(polyRec.cashPnl)
+      if (out.percentPnl == null && polyRec.percentPnl != null) out.percentPnl = Number(polyRec.percentPnl)
+      if (out.entry_price == null && polyRec.avgPrice != null) out.entry_price = Number(polyRec.avgPrice)
+      // Poly currentValue should override backend for now
+      if (polyRec.currentValue != null) out.currentValue = Number(polyRec.currentValue)
+      if (out.curPrice == null && polyRec.curPrice != null) out.curPrice = Number(polyRec.curPrice)
+      if (out.outcome == null && polyRec.outcome != null) out.outcome = polyRec.outcome // keep string on top-level
+
+      // Ensure a stable id for poly-only rows so React keys are defined
+      if (out.id == null) {
+        // const idSeed =
+        //   polyRec.id ||
+        //   polyRec.conditionId ||
+        //   polyRec.asset ||
+        //   polyRec.slug ||
+        //   'poly'
+        // const outcomeSeed = polyRec.outcomeIndex ?? polyRec.outcome ?? 'NA'
+        out.id = uuidv4()
+      }
+
+      // Market info (fill if missing)
+      out.market = {
+        ...(out.market || {}),
+        question: out.market?.question ?? polyRec.title,
+        icon: out.market?.icon ?? polyRec.icon,
+        slug: out.market?.slug ?? polyRec.slug,
+        eventSlug: out.market?.eventSlug ?? polyRec.eventSlug,
+        endDate: out.market?.endDate ?? polyRec.endDate,
+      }
+
+      // Do not attach any fields to out.outcome object here (per request)
+
+      return out
+    }
+
+    // Overlay poly (fill gaps, mark as data-only when no backend)
+    poly?.forEach(p => {
+      const linkId = String(p.asset || p.conditionId || '')
+      const backendMatch = linkId ? backendByClob.get(linkId) : undefined
+
+      if (backendMatch) {
+        // Merge into the existing backend entry keyed by its original key; no duplicate
+        let merged = adaptFromPoly(p, normalize({ ...backendMatch.value }))
+        merged.isDataApi = false
+        merged = computeDerived(normalize(merged))
+        map.set(backendMatch.key, merged)
+      } else {
+        // Poly-only entry (data-only)
+        const adaptedOnly = adaptFromPoly(p, {})
+        const k = keyFor(adaptedOnly)
+        let onlyPoly = computeDerived(normalize(adaptedOnly))
+        onlyPoly.isDataApi = true
+        map.set(k, onlyPoly)
+      }
+    })
+
+    return Array.from(map.values())
   }
 
-  useEffect(() => {
-    fetchPositions()
-  }, [refreshTrigger])
+  // New: backend fetch with original processing (dedupe outcomes, resolved status)
+  const fetchBackendPositions = async () => {
+    const response = await fetch('http://localhost:8000/api/v1/positions/')
+    if (!response.ok) {
+      throw new Error('Failed to fetch positions')
+    }
+    const data = await response.json()
 
-  const handleSellPosition = async (positionId) => {
-    setSellingPosition(positionId)
-    
-    try {
-      const response = await fetch(`/api/v1/positions/${positionId}/sell`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({}) // Empty body for market sell
-      })
+    const processedData = data.map(position => {
+      // Dedupe outcomes by clob_id/external_id/name, keep most recently updated
+      if (position.market && Array.isArray(position.market.outcomes) && position.market.outcomes.length > 0) {
+        const outcomeGroups = position.market.outcomes.reduce((groups, outcome) => {
+          const key = outcome.clob_id || outcome.external_id || outcome.name
+          if (!groups[key] || new Date(outcome.updated_at) > new Date(groups[key].updated_at)) {
+            groups[key] = outcome
+          }
+          return groups
+        }, {})
+        position.market.outcomes = Object.values(outcomeGroups)
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to sell position')
+        // Try to map the correct outcome onto the position
+        let currentOutcome = position.market.outcomes.find(o => o.id === position.outcome_id)
+        if (!currentOutcome && position.outcome?.clob_id) {
+          currentOutcome = position.market.outcomes.find(o => o.clob_id === position.outcome.clob_id)
+        }
+        if (currentOutcome) {
+          position.outcome = currentOutcome
+        }
       }
 
-      // Refresh positions after successful sell
-      await fetchPositions()
-    } catch (err) {
-      setError(err.message)
+      // Update resolved_status based on market resolution and fill status
+      if (position.market && position.market.status === 'closed') {
+        const wasNeverFilled =
+          (position.volume === 0 || position.volume === null) &&
+          (position.entry_price === 0 || position.entry_price === null)
+
+        if (wasNeverFilled) {
+          position.resolved_status = 'not_filled'
+        } else {
+          const resolvedOutcome = Array.isArray(position.market.outcomes)
+            ? position.market.outcomes.find(o => o.current_price === 1.0)
+            : null
+          if (resolvedOutcome) {
+            position.market.resolved_at = position.market.updated_at
+            position.resolved_status = position.outcome_id === resolvedOutcome.id ? 'won' : 'lost'
+          }
+        }
+      }
+
+      return position
+    })
+
+    return processedData
+  }
+
+  // Log the merged positions on every render (for debugging)
+  console.log('Merged Positions:', mergedPositions)
+
+  // Fetch positions data from the server, then merge with poly
+  useEffect(() => {
+    let isMounted = true
+    setLoading(true)
+    setError('')
+
+    const fetchPositionsData = async () => {
+      try {
+        // Fetch and process backend positions first
+        const backend = await fetchBackendPositions()
+        console.log('Fetched Positions Data:', backend)
+        if (!isMounted) return
+
+        // Merge with poly positions next
+        const merged = mergePositions(polyPositions, Array.isArray(backend) ? backend : [])
+        setMergedPositions(merged)
+      } catch (err) {
+        console.error('Error fetching positions:', err)
+        if (isMounted) setError('Failed to load positions')
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    fetchPositionsData()
+    return () => { isMounted = false }
+  }, [refreshTrigger, setMergedPositions, polyPositions])
+
+  // Check redeemable positions on mount and when mergedPositions change
+  useEffect(() => {
+    let isMounted = true
+
+    const checkRedeemablePositions = async () => {
+      if (!Array.isArray(positionsToShow) || positionsToShow.length === 0) {
+        if (isMounted) {
+          setRedeemablePositions([])
+        }
+        return
+      }
+
+      try {
+        // Construct the URL with multiple status filters
+        const url = new URL(`${process.env.NEXT_PUBLIC_API_URL}/positions/`)
+        ;['open', 'filled', 'won', 'lost'].forEach(s => url.searchParams.append('status', s))
+
+        const response = await fetch(url.toString())
+        const data = await response.json()
+
+        if (isMounted) {
+          setRedeemablePositions(Array.isArray(data) ? data : [])
+        }
+      } catch (error) {
+        console.error('Error checking redeemable status:', error)
+        if (isMounted) {
+          setRedeemablePositions([])
+        }
+      }
+    }
+
+    // Depend on positionsToShow (ids) to avoid unnecessary loops
+    const key = positionsToShow.map(p => p.id).sort().join(',')
+    if (key) {
+      checkRedeemablePositions()
+    } else if (isMounted) {
+      setRedeemablePositions([])
+    }
+    return () => { isMounted = false }
+  }, [mergedPositions])
+
+  // Handle allowance updates from TokenAllowance component
+  const handleAllowanceUpdated = async () => {
+    await checkAllowances()
+  }
+
+  // Add minimal handler stubs to avoid reference errors
+  const handleSellPosition = async (positionId) => {
+    setSellingPosition(positionId)
+    try {
+      console.log('Sell position requested:', positionId)
+      // TODO: implement sell API call
+    } catch (e) {
+      console.error('Sell failed:', e)
+      setError('Failed to sell position')
     } finally {
       setSellingPosition(null)
     }
   }
 
-  const getStatusBadge = (position) => {
-    // Check if market is resolved
-    if (position.resolved_status) {
-      if (position.resolved_status === 'won') {
-        return <Badge variant="default" className="bg-green-500 text-white">Won</Badge>
-      } else if (position.resolved_status === 'lost') {
-        return <Badge variant="destructive">Lost</Badge>
-      } else if (position.resolved_status === 'not_filled') {
-        return <Badge variant="outline" className="text-gray-600">Not Filled</Badge>
+  const handleCancelOrder = async (positionId) => {
+    setCancelingPosition(positionId)
+    try {
+      console.log('Cancel order requested:', positionId)
+      // TODO: implement cancel API call
+    } catch (e) {
+      console.error('Cancel failed:', e)
+      setError('Failed to cancel order')
+    } finally {
+      setCancelingPosition(null)
+    }
+  }
+
+  const handleRedeemPosition = async (pos) => {
+    const positionId = pos?.id
+    const conditionId = pos?.conditionId || "0x"
+    console.log('Redeem position:', positionId, 'Condition ID:', conditionId)
+    setRedeemingPosition(positionId)
+    try {
+      console.log('Redeem requested:', positionId)
+      // convert to POST METHOD
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/redemption/redeem/${positionId}?conditionId=${conditionId}`, {
+        method: 'POST'
+      })
+      if (!response.ok) {
+        throw new Error('Redeem failed')
       }
+      // TODO: implement redeem API call
+    } catch (e) {
+      console.error('Redeem failed:', e)
+      setError('Failed to redeem position')
+    } finally {
+      console.log('Redeem completed for position:', positionId)
+      setRedeemingPosition(null)
     }
-    
-    // Check if market is closed but not resolved
-    if (position.market && position.market.status === 'closed') {
-      return <Badge variant="outline">Closed</Badge>
-    }
-    
-    // Default status badges
-    const statusConfig = {
-      open: { variant: 'secondary', label: 'Open' },
-      filled: { variant: 'default', label: 'Filled' },
-      closed: { variant: 'outline', label: 'Closed' },
-      cancelled: { variant: 'destructive', label: 'Cancelled' }
-    }
-    
-    const config = statusConfig[position.status] || statusConfig.open
-    return <Badge variant={config.variant}>{config.label}</Badge>
-  }
-
-  const calculatePnL = (position, currentPrice) => {
-    if (!position.entry_price || currentPrice === undefined || currentPrice === null) return null
-    
-    const entryPrice = position.entry_price
-    const volume = position.volume || 1
-    const pnl = (currentPrice - entryPrice) * volume
-    const pnlPercent = ((currentPrice - entryPrice) / entryPrice) * 100
-    
-    return { pnl, pnlPercent }
-  }
-  
-  // Get current price from real-time prices or fallback to position's outcome probability
-  const getCurrentPrice = (position) => {
-    if (!position?.outcome?.id) return position.outcome?.probability || 0;
-    
-    // Log for debugging
-    console.log('Current prices map:', Object.fromEntries(currentPrices));
-    console.log('Looking up price for outcome ID:', position.outcome.id);
-    
-    // Check if we have price data for this position's outcome (using outcome.id as key)
-    const currentPrice = currentPrices.get(position.outcome.id);
-    console.log('Current price for outcome:', currentPrice);
-    
-    if (currentPrice !== undefined) {
-      console.log('Using real-time price:', currentPrice);
-      return currentPrice;
-    }
-    
-    // Use the filtered outcome's current_price (which should be the most recent/accurate)
-    const outcomePrice = position.outcome?.current_price;
-    if (outcomePrice !== undefined && outcomePrice !== null) {
-      console.log('Using filtered outcome current_price:', outcomePrice);
-      return outcomePrice;
-    }
-    
-    console.log('Using fallback probability:', position.outcome?.probability);
-    // Final fallback to the position's outcome probability if no price data is available
-    return position.outcome?.probability || 0;
-  }
-
-  const formatPrice = (price) => {
-    if (price === null || price === undefined) return '-'
-    return `${(price * 100).toFixed(1)}¢`
-  }
-
-  const formatPnL = (pnl, pnlPercent) => {
-    if (pnl === null || pnlPercent === null) return '-'
-    
-    const isPositive = pnl >= 0
-    const color = isPositive ? 'text-green-600' : 'text-red-600'
-    const icon = isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />
-    
-    return (
-      <div className={`flex items-center gap-1 ${color}`}>
-        {icon}
-        <span>${pnl.toFixed(2)} ({pnlPercent.toFixed(1)}%)</span>
-      </div>
-    )
-  }
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin mr-2" />
-          Loading positions...
-        </CardContent>
-      </Card>
-    )
   }
 
   return (
@@ -280,8 +405,16 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails }) {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+        
+        {/* {!allowances.usdc_for_exchange?.approved || !allowances.ctf_for_exchange?.approved ? (
+          <TokenAllowance 
+            position={positions[0]} 
+            onAllowanceUpdated={handleAllowanceUpdated} 
+            className="mb-4"
+          />
+        ) : null} */}
 
-        {positions.length === 0 ? (
+        {positionsToShow.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>No positions found</p>
@@ -297,19 +430,39 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails }) {
                   <TableHead>Status</TableHead>
                   <TableHead>Entry Price</TableHead>
                   <TableHead>Current Price</TableHead>
-                  <TableHead>Volume</TableHead>
+                  <TableHead>Current Value</TableHead>
+                  <TableHead>Volume / Size</TableHead>
                   <TableHead>PnL</TableHead>
                   <TableHead>Targets</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {positions.map((position) => {
-                  const currentPrice = getCurrentPrice(position);
-                  const pnlData = calculatePnL(position, currentPrice);
-                  
+                {positionsToShow.map((position) => {
+                  const currentPrice = getCurrentPrice(position)
+                  const pnlData = (position.total_pnl != null || position.percentPnl != null)
+                    ? { pnl: position.total_pnl ?? null, pnlPercent: position.percentPnl ?? null }
+                    : calculatePnL(position, currentPrice)
+
+                  const derivedCurrentValue = Number(
+                    position?.currentValue ??
+                    // TODO: add fallback logic here (e.g., position.size * currentPrice)
+                    0
+                  );
+
+                  const rowKey =
+                    position.clob_id ||
+                    position.asset ||
+                    position.id ||
+                    `${position.slug || position.market?.slug || 'row'}:${position.outcomeIndex ?? position.outcome?.id ?? position.outcome ?? ''}`
+
+                  const outcomeLabel =
+                    typeof position.outcome === 'string'
+                      ? position.outcome
+                      : (position.outcome?.name ?? 'Unknown Outcome')
+
                   return (
-                    <TableRow key={position.id}>
+                    <TableRow key={rowKey}>
                       <TableCell className="max-w-xs">
                         <div className="truncate" title={position.market?.question}>
                           {position.market?.question || 'Unknown Market'}
@@ -326,17 +479,30 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails }) {
                           </div>
                         )}
                       </TableCell>
-                      
+
                       <TableCell>
-                        {position.outcome?.name || 'Unknown Outcome'}
+                        {outcomeLabel}
                       </TableCell>
-                      
+
                       <TableCell>
                         {getStatusBadge(position)}
                       </TableCell>
-                      
+
                       <TableCell>
-                        {formatPrice(position.entry_price)}
+                        <div className="space-y-1">
+                          <div>{formatPrice(position.entry_price)}</div>
+                          {(() => {
+                            const riskLevel = getStopLossRiskLevel(position, currentPrice)
+                            if (riskLevel) {
+                              return (
+                                <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${riskLevel.color}`}>
+                                  {riskLevel.message}
+                                </div>
+                              )
+                            }
+                            return null
+                          })()} 
+                        </div>
                       </TableCell>
                       
                       <TableCell className={pricesLoading ? 'opacity-70' : ''}>
@@ -349,9 +515,14 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails }) {
                           formatPrice(currentPrice)
                         )}
                       </TableCell>
+
+                      <TableCell>
+                        {derivedCurrentValue != null ? `$${derivedCurrentValue.toFixed(2)}` : '-'}
+                      </TableCell>
                       
                       <TableCell>
-                        {position.volume || '-'}
+                        {/* show volume and size side-by-side */}
+                        {formatVolume(position.volume)}{position.size != null ? ` / ${formatVolume(position.size)}` : ''}
                       </TableCell>
                       
                       <TableCell>
@@ -385,30 +556,133 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails }) {
                             View Details
                           </Button>
                           
-                          {position.status === 'filled' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleSellPosition(position.id)}
-                              disabled={sellingPosition === position.id}
-                            >
-                              {sellingPosition === position.id ? (
+                          {(() => {
+                            // If current value is zero, show Lost (replace Claim Winnings)
+                            const isLostValue = derivedCurrentValue != null && Number(derivedCurrentValue) === 0
+                            if (isLostValue) {
+                              return (
+                                <Button variant="destructive" size="sm" disabled>
+                                  Lost
+                                </Button>
+                              );
+                            }
+
+                            // Redeemable positions with non-zero current value -> Claim Winnings
+                            const canRedeem = !!position.redeemable && !isLostValue
+                            if (canRedeem) {
+                              return (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => handleRedeemPosition(position)}
+                                  disabled={redeemingPosition === position.id}
+                                  className="bg-green-600 hover:bg-green-700 text-white"
+                                >
+                                  {redeemingPosition === position.id ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                      Redeeming...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <DollarSign className="h-3 w-3 mr-1" />
+                                      Claim Winnings
+                                    </>
+                                  )}
+                                </Button>
+                              );
+                            }
+
+                            // Open/filled positions (not resolved) and not data-only -> allow Sell
+                            const isFilled = position.status === 'filled'
+                              && (!position.resolved_status || position.resolved_status === '')
+                              && !position.isDataApi
+                            if (isFilled) {
+                              const riskLevel = getStopLossRiskLevel(position, currentPrice);
+                              const isHighRisk = riskLevel && (riskLevel.level === 'crash' || riskLevel.level === 'high');
+                              return (
                                 <>
-                                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                  Selling...
+                                  <Button
+                                    variant={isHighRisk ? "destructive" : "outline"}
+                                    size="sm"
+                                    onClick={() => handleSellPosition(position.id)}
+                                    disabled={sellingPosition === position.id}
+                                    className={isHighRisk ? "animate-pulse" : ""}
+                                  >
+                                    {sellingPosition === position.id ? (
+                                      <>
+                                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                        Selling...
+                                      </>
+                                    ) : (
+                                      <>
+                                        {isHighRisk && <Shield className="h-3 w-3 mr-1" />}
+                                        {isHighRisk ? 'EMERGENCY SELL' : 'Sell'}
+                                      </>
+                                    )}
+                                  </Button>
+                                  {riskLevel && riskLevel.level === 'crash' && (
+                                    <div className="flex items-center gap-1 text-xs text-red-600 font-medium">
+                                      🚨 CRASH DETECTED!
+                                    </div>
+                                  )}
                                 </>
-                              ) : (
-                                'Sell'
-                              )}
-                            </Button>
-                          )}
-                          
-                          {position.status === 'open' && (
-                            <div className="flex items-center gap-1 text-xs text-gray-500">
-                              <Clock className="h-3 w-3" />
-                              Pending
-                            </div>
-                          )}
+                              );
+                            }
+
+                            // Pending: show Pending label and a Cancel button for open positions
+                            if (position.status === 'open' || position.status === 'not_filled') {
+                              return (
+                                <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                                    <Clock className="h-3 w-3" />
+                                    Pending
+                                  </div>
+                                  {position.status === 'open' && !position.isDataApi && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleCancelOrder(position.id)}
+                                      disabled={cancelingPosition === position.id}
+                                    >
+                                      {cancelingPosition === position.id ? (
+                                        <>
+                                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                          Cancelling...
+                                        </>
+                                      ) : (
+                                        'Cancel'
+                                      )}
+                                    </Button>
+                                  )}
+                                </div>
+                              );
+                            }
+
+                            // Already redeemed (explicit)
+                            const hasRedemptionRecord = position.redemptions && position.redemptions.length > 0 && 
+                              position.redemptions.some(r => r.status === 'completed');
+                            if (position.resolved_status === 'won' && hasRedemptionRecord) {
+                              return (
+                                <div className="flex items-center gap-1 text-xs text-green-600">
+                                  <DollarSign className="h-3 w-3" />
+                                  Already Redeemed
+                                </div>
+                              );
+                            }
+                            
+                            // Lost positions by resolution (if not captured by value==0)
+                            if (position.resolved_status === 'lost') {
+                              return (
+                                <div className="flex items-center gap-1 text-xs text-red-600">
+                                  Lost
+                                </div>
+                              );
+                            }
+
+                            return null;
+                          })()}
+
                         </div>
                       </TableCell>
                     </TableRow>
