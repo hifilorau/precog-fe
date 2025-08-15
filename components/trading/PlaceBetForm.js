@@ -1,12 +1,21 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo,useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, TrendingUp, Shield, Target, Sparkles, BookOpen, ArrowDown, ArrowUp } from 'lucide-react'
+import { Loader2, TrendingUp, Shield, Target, Sparkles, BookOpen, ArrowDown, ArrowUp, Wallet } from 'lucide-react'
+import { useStateContext } from '@/app/store'
+import { toast } from 'sonner'
+
+// Helper function to calculate number of shares based on balance and price
+const calculateShares = (balance, price, percentage = 0.1) => {
+  if (!balance || !price || price <= 0) return 0;
+  const amountToSpend = balance * percentage;
+  return Math.floor(amountToSpend / price);
+};
 
 export default function PlaceBetForm({ 
   market, 
@@ -16,20 +25,38 @@ export default function PlaceBetForm({
   showCard = true,
   className = ""
 }) {
-  // References for input fields to maintain focus
-  const inputRefs = {
-    max_bid_price: useRef(null),
-    sell_price: useRef(null),
-    stop_loss_price: useRef(null),
-    volume: useRef(null)
-  }
+  // Get wallet balance from global state
+  const { balance: globalBalance, updateState } = useStateContext();
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   
+  // Memoize balance to prevent unnecessary re-renders
+  const balance = useMemo(() => globalBalance, [globalBalance]);
+  
+  // Stable refs for input elements
+  const maxBidPriceRef = useRef(null);
+  const volumeRef = useRef(null);
+  const sellPriceRef = useRef(null);
+  const stopLossRef = useRef(null);
+  
+  // Memoize refs object to maintain stability
+  const inputRefs = useMemo(() => ({
+    max_bid_price: maxBidPriceRef,
+    volume: volumeRef,
+    sell_price: sellPriceRef,
+    stop_loss_price: stopLossRef
+  }), []);
+
+  // Form state
   const [formData, setFormData] = useState({
     max_bid_price: '',
+    volume: '',
     sell_price: '',
     stop_loss_price: '',
-    volume: ''
-  })
+    order_type: 'limit',
+    time_in_force: 'gtc',
+    post_only: true
+  });
+
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
   
@@ -52,28 +79,84 @@ export default function PlaceBetForm({
     spread: null
   })
 
-  const handleInputChange = (field, value) => {
-    // Store the current selection position
-    const input = inputRefs[field].current
-    const selectionStart = input ? input.selectionStart : null
-    const selectionEnd = input ? input.selectionEnd : null
-    
+
+  // Stable update form data function - defined early since it's used by other functions
+  const updateFormData = useCallback((updater) => {
     setFormData(prev => ({
       ...prev,
-      [field]: value
-    }))
-    setError('') // Clear error when user types
-    
-    // Restore cursor position after state update
-    if (selectionStart !== null && selectionEnd !== null) {
-      setTimeout(() => {
-        if (input) {
-          input.setSelectionRange(selectionStart, selectionEnd)
-        }
-      }, 0)
+      ...(typeof updater === 'function' ? updater(prev) : updater)
+    }));
+  }, []);
+
+  // Fetch wallet balance and update form
+  const fetchWalletBalance = useCallback(async () => {
+    try {
+      setIsLoadingBalance(true);
+      const response = await fetch('/api/wallet/balance/usdc');
+      if (!response.ok) throw new Error('Failed to fetch wallet balance');
+      const { balance: usdcBalance } = await response.json();
+      
+      // Update global state
+      updateState({ balance: parseFloat(usdcBalance) });
+      return parseFloat(usdcBalance);
+    } catch (error) {
+      console.error('Error fetching wallet balance:', error);
+      toast.error('Failed to load wallet balance');
+      return 0;
+    } finally {
+      setIsLoadingBalance(false);
     }
-  }
+  }, [updateState]);
+
+  // Memoize the updateShareQuantity function
+  const updateShareQuantity = useCallback((price) => {
+    if (!price || !balance) return;
+    const shares = calculateShares(balance, parseFloat(price));
+    updateFormData({ volume: shares.toString() });
+  }, [balance, updateFormData]);
+
+  // Convert between display value (e.g., 90.5) and internal value (e.g., 0.905)
+  const parsePriceInput = (value) => {
+    if (!value) return '';
+    const num = parseFloat(value);
+    return isNaN(num) ? '' : (num / 100).toFixed(4);
+  };
+
+  const formatPriceDisplay = (value) => {
+    if (!value) return '';
+    const num = parseFloat(value);
+    return isNaN(num) ? '' : (num * 100).toFixed(2);
+  };
+
+  // Stable input change handler
+  const handleInputChange = useCallback((e) => {
+    const { name, value } = e.target;
+    
+    // Update the form data
+    updateFormData(prev => {
+      const newData = { ...prev, [name]: value };
+      
+      // Recalculate shares when price changes
+      if (name === 'max_bid_price' && value) {
+        const price = parseFloat(value) / 100; // Convert to decimal for calculation
+        const shares = calculateShares(balance || 0, price);
+        newData.volume = shares.toString();
+      }
+      
+      return newData;
+    });
+  }, [balance, updateFormData]);
   
+  // Stable refresh balance handler
+  const handleRefreshBalance = useCallback(async (e) => {
+    e?.preventDefault();
+    const newBalance = await fetchWalletBalance();
+    if (newBalance > 0) {
+      updateShareQuantity(parseFloat(formData.max_bid_price || '0'));
+      toast.success('Balance refreshed');
+    }
+  }, [fetchWalletBalance, formData.max_bid_price, updateShareQuantity]);
+
   // Auto-fill price fields based on order book data and historical data
   const autoFillPrices = () => {
     const currentPricePercent = (outcome.probability * 100).toFixed(2)
@@ -125,7 +208,7 @@ export default function PlaceBetForm({
       stop_loss_price: stopLoss
     }))
   }
-  
+
   // Show price suggestions for the field with focus
   const handleFocus = (field) => {
     setActiveField(field)
@@ -139,7 +222,7 @@ export default function PlaceBetForm({
   
   // Apply a suggested price to a specific field
   const applySuggestion = (field, value) => {
-    handleInputChange(field, value)
+    handleInputChange({ target: { name: field, value } })
     if (inputRefs[field].current) {
       inputRefs[field].current.focus()
     }
@@ -152,12 +235,26 @@ export default function PlaceBetForm({
       return 'Max bid price is required and must be greater than 0'
     }
     
-    if (sell_price && parseFloat(sell_price) <= parseFloat(max_bid_price)) {
-      return 'Sell price must be greater than max bid price'
+    if (parseFloat(max_bid_price) >= 100) {
+      return 'Max bid price must be less than 100 (1.00)'
     }
     
-    if (stop_loss_price && parseFloat(stop_loss_price) >= parseFloat(max_bid_price)) {
-      return 'Stop loss price must be less than max bid price'
+    if (sell_price) {
+      if (parseFloat(sell_price) <= parseFloat(max_bid_price)) {
+        return 'Sell price must be greater than max bid price'
+      }
+      if (parseFloat(sell_price) >= 100) {
+        return 'Sell price must be less than 100 (1.00)'
+      }
+    }
+    
+    if (stop_loss_price) {
+      if (parseFloat(stop_loss_price) >= parseFloat(max_bid_price)) {
+        return 'Stop loss price must be less than max bid price'
+      }
+      if (parseFloat(stop_loss_price) <= 0) {
+        return 'Stop loss price must be greater than 0'
+      }
     }
     
     return null
@@ -177,20 +274,16 @@ export default function PlaceBetForm({
     setError('')
 
     try {
-      // Convert percentage values (0-100) to decimal values (0-1) for the backend
-      const convertToDecimal = (percentValue) => {
-        if (!percentValue) return undefined;
-        const decimalValue = parseFloat(percentValue) / 100;
-        return decimalValue;
-      };
-      
       const positionData = {
         market_id: market.id,
         outcome_id: outcome.id,
-        max_bid_price: convertToDecimal(formData.max_bid_price),
-        ...(formData.sell_price && { sell_price: convertToDecimal(formData.sell_price) }),
-        ...(formData.stop_loss_price && { stop_loss_price: convertToDecimal(formData.stop_loss_price) }),
-        ...(formData.volume && { volume: parseFloat(formData.volume) }) // Volume is not a percentage
+        max_bid_price: parseFloat(formData.max_bid_price) / 100, // Convert to decimal for backend
+        volume: parseFloat(formData.volume),
+        sell_price: formData.sell_price ? parseFloat(formData.sell_price) / 100 : null,
+        stop_loss_price: formData.stop_loss_price ? parseFloat(formData.stop_loss_price) / 100 : null,
+        order_type: formData.order_type,
+        time_in_force: formData.time_in_force,
+        post_only: formData.post_only
       }
 
       console.log('Sending position data to backend:', positionData);
@@ -314,7 +407,7 @@ export default function PlaceBetForm({
   
   // Fetch order book data when component mounts
   useEffect(() => {
-    if (!outcome?.clob_id) return
+    if (!outcome?.clob_id) return;
     
     // Function to fetch order book data
     const fetchOrderBook = async () => {
@@ -433,6 +526,31 @@ export default function PlaceBetForm({
   
   const currentPrice = outcome.probability || 0.5
 
+  // Set initial values when market/outcome changes
+  useEffect(() => {
+    if (!outcome) return;
+    
+    const price = outcome.current_price || 0.5;
+    
+    // Only update if the price is different to prevent unnecessary re-renders
+    setFormData(prev => {
+      if (prev.max_bid_price === price.toFixed(2)) return prev;
+      return { ...prev, max_bid_price: price.toFixed(2) };
+    });
+    
+    // Fetch balance and update shares in a separate effect
+    const initializeForm = async () => {
+      const currentBalance = balance || await fetchWalletBalance();
+      if (currentBalance > 0) {
+        updateShareQuantity(price);
+      }
+    };
+    
+    initializeForm();
+    
+    // Include all dependencies used in the effect
+  }, [outcome, balance, fetchWalletBalance, updateShareQuantity, updateFormData]);
+
   const FormContent = () => (
     <div className={className}>
       <h3 className='text-lg font-semibold mb-4'>Place Limit Order</h3>
@@ -540,15 +658,14 @@ export default function PlaceBetForm({
           <div className="relative">
             <Input
               id="max_bid_price"
-              ref={inputRefs.max_bid_price}
+              name="max_bid_price"
               type="number"
               step="0.01"
               min="0.01"
               max="99.99"
               value={formData.max_bid_price}
-              onChange={(e) => handleInputChange('max_bid_price', e.target.value)}
-              onFocus={() => handleFocus('max_bid_price')}
-              onBlur={handleBlur}
+              onChange={handleInputChange}
+              ref={inputRefs.max_bid_price}
               placeholder="e.g., 65.50"
               required
               className="text-lg"
@@ -573,24 +690,69 @@ export default function PlaceBetForm({
           </p>
         </div>
 
-        {/* Volume - Optional */}
-        <div className="space-y-2">
-          <Label htmlFor="volume">
-            Number of Shares (optional)
-          </Label>
-          <Input
-            id="volume"
-            ref={inputRefs.volume}
-            type="number"
-            step="1"
-            min="1"
-            value={formData.volume}
-            onChange={(e) => handleInputChange('volume', e.target.value)}
-            placeholder="e.g., 100"
-          />
-          <p className="text-xs text-gray-500">
-            Leave empty to use available balance
-          </p>
+        <div className="grid gap-4">
+          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
+            <div className="flex items-center space-x-2">
+              <Wallet className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Available Balance:</span>
+              {isLoadingBalance ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <span className="font-mono">{balance?.toFixed(2) || '0.00'} USDC</span>
+              )}
+            </div>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleRefreshBalance}
+              disabled={isLoadingBalance}
+            >
+              {isLoadingBalance ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Refresh'
+              )}
+            </Button>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="max_bid_price">Max Bid Price (USDC)</Label>
+              <Input
+                id="max_bid_price"
+                name="max_bid_price"
+                type="number"
+                step="0.1"
+                min="1"
+                max="99.5"
+                value={formData.max_bid_price}
+                onChange={handleInputChange}
+                ref={inputRefs.max_bid_price}
+                placeholder="0.50"
+              />
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="volume">Number of Shares</Label>
+                <span className="text-xs text-muted-foreground">
+                  ~{(parseFloat(formData.max_bid_price || 0) * (parseInt(formData.volume) || 0)).toFixed(2)} USDC
+                </span>
+              </div>
+              <Input
+                id="volume"
+                name="volume"
+                type="number"
+                min="1"
+                value={formData.volume}
+                onChange={handleInputChange}
+                ref={inputRefs.volume}
+                placeholder="10"
+              />
+              <p className="text-xs text-muted-foreground">
+                Based on 10% of available balance
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Sell Price - Optional */}
@@ -608,7 +770,8 @@ export default function PlaceBetForm({
               min="0.01"
               max="99.99"
               value={formData.sell_price}
-              onChange={(e) => handleInputChange('sell_price', e.target.value)}
+              name="sell_price"
+              onChange={handleInputChange}
               onFocus={() => handleFocus('sell_price')}
               onBlur={handleBlur}
               placeholder="e.g., 75.00"
@@ -648,7 +811,8 @@ export default function PlaceBetForm({
               min="0.01"
               max="99.99"
               value={formData.stop_loss_price}
-              onChange={(e) => handleInputChange('stop_loss_price', e.target.value)}
+              name="stop_loss_price"
+              onChange={handleInputChange}
               onFocus={() => handleFocus('stop_loss_price')}
               onBlur={handleBlur}
               placeholder="e.g., 55.00"

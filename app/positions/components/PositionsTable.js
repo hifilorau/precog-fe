@@ -1,12 +1,16 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock } from 'lucide-react'
+import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock, Plus } from 'lucide-react'
 import { v4 as uuidv4 } from 'uuid';
+
+// Components
+import QuickBetModal from './QuickBetModal';
 
 import {
   formatPrice,
@@ -26,7 +30,10 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails, poly
   const [redeemingPosition, setRedeemingPosition] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [redeemablePositions, setRedeemablePositions] = useState([])
+  const [redeemablePositions, setRedeemablePositions] = useState([]);
+  const [quickBetMarket, setQuickBetMarket] = useState(null);
+  const [quickBetOutcome, setQuickBetOutcome] = useState(null);
+  const [showQuickBet, setShowQuickBet] = useState(false);
 
 
   // Allowance context (for USDC and CTFC)
@@ -326,16 +333,40 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails, poly
   }
 
   // Add minimal handler stubs to avoid reference errors
-  const handleSellPosition = async (positionId) => {
-    setSellingPosition(positionId)
+  const handleSellPosition = async (position) => {
+    setSellingPosition(position.id);
     try {
-      console.log('Sell position requested:', positionId)
-      // TODO: implement sell API call
-    } catch (e) {
-      console.error('Sell failed:', e)
-      setError('Failed to sell position')
+      console.log('Sell position requested:', position.id);
+      
+      // Call the sell API endpoint
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/positions/${position.id}/sell`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          // Include any required parameters for the sell order
+          price: position.sell_price || position.current_price, // Use sell target or current price
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to sell position');
+      }
+
+      // Show success message
+      toast.success('Sell order placed successfully');
+      
+      // Refresh positions to show updated status
+      if (onPositionsUpdated) {
+        onPositionsUpdated();
+      }
+    } catch (error) {
+      console.error('Sell failed:', error);
+      toast.error(error.message || 'Failed to sell position');
     } finally {
-      setSellingPosition(null)
+      setSellingPosition(null);
     }
   }
 
@@ -605,7 +636,7 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails, poly
                                   <Button
                                     variant={isHighRisk ? "destructive" : "outline"}
                                     size="sm"
-                                    onClick={() => handleSellPosition(position.id)}
+                                    onClick={() => handleSellPosition(position)}
                                     disabled={sellingPosition === position.id}
                                     className={isHighRisk ? "animate-pulse" : ""}
                                   >

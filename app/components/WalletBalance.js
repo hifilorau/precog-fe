@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useStateContext } from '../store';
 
 export default function WalletBalance() {
-  const [balance, setBalance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { balance, updateState } = useStateContext();
 
   useEffect(() => {
     const fetchBalance = async () => {
@@ -15,7 +16,7 @@ export default function WalletBalance() {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/wallet/balance/usdc`,
           {
-            credentials: 'include', // Include cookies for auth
+            // credentials: 'include', // Include cookies for auth
             headers: {
               'Content-Type': 'application/json',
             },
@@ -27,7 +28,7 @@ export default function WalletBalance() {
         }
 
         const data = await response.json();
-        setBalance(data.balance);
+        updateState({ balance: data.balance });
       } catch (err) {
         console.error('Error fetching wallet balance:', err);
         setError(err.message);
@@ -37,7 +38,7 @@ export default function WalletBalance() {
     };
 
     fetchBalance();
-  }, []);
+  }, [updateState]);
 
   if (loading) {
     return (

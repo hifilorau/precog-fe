@@ -1,0 +1,85 @@
+'use client';
+
+import { useState, useEffect, useCallback, useRef } from 'react';
+import OpportunityFilters from './components/OpportunityFilters';
+import OpportunityTable from './components/OpportunityTable';
+import LoadMoreButton from './components/LoadMoreButton';
+import ErrorDisplay from './components/ErrorDisplay';
+import QuickBetModal from '../positions/components/QuickBetModal';
+
+const OpportunitiesPage = () => {
+  const [opportunities, setOpportunities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [quickBetMarket, setQuickBetMarket] = useState(null);
+  const [quickBetOutcome, setQuickBetOutcome] = useState(null);
+  const [showQuickBet, setShowQuickBet] = useState(false);
+  const [filters, setFilters] = useState({
+    status: 'active',
+    source: '',
+    min_score: '',
+    max_score: '',
+    min_price: '',
+    max_price: '',
+    min_movement: '',
+    max_movement: '',
+    min_volume: '50000' // Default minimum volume of $50,000
+  });
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const isLoadingMore = useRef(false);
+
+  const handleQuickBet = (market, outcome) => {
+    setQuickBetMarket(market);
+    setQuickBetOutcome(outcome);
+    setShowQuickBet(true);
+  };
+
+  // ... rest of the component code ...
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Market Opportunities</h1>
+        <button
+          onClick={resetFilters}
+          className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50"
+        >
+          Reset Filters
+        </button>
+      </div>
+      
+      <OpportunityFilters 
+        filters={filters} 
+        onFilterChange={handleFilterChange} 
+      />
+
+      <OpportunityTable 
+        opportunities={opportunities}
+        loading={loading}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSort={handleSort}
+        onQuickBet={handleQuickBet}
+      />
+
+      <LoadMoreButton 
+        hasMore={hasMore}
+        loading={loading}
+        onLoadMore={loadMore}
+      />
+
+      <QuickBetModal
+        market={quickBetMarket}
+        outcome={quickBetOutcome}
+        isOpen={showQuickBet}
+        onClose={() => setShowQuickBet(false)}
+        actionType="buy"
+      />
+    </div>
+  );
+};
+
+export default OpportunitiesPage;
