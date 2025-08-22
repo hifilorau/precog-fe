@@ -1,16 +1,12 @@
 'use client'
 
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock, Plus } from 'lucide-react'
-import { v4 as uuidv4 } from 'uuid';
-
-// Components
-import QuickBetModal from './QuickBetModal';
+import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock } from 'lucide-react'
 
 import {
   formatPrice,
@@ -21,23 +17,14 @@ import {
   getStopLossRiskLevel,
   formatPnL,
 } from '@/app/utils/formatters'
-import useAllowances from '@/hooks/useAllowances'
 import { useRealTimePrices } from '@/hooks/useRealTimePrices'
 
-export default function PositionsTable({ refreshTrigger = 0, onViewDetails, polyPositions = [] }) {
+export default function PositionsTable({ refreshTrigger = 0, onViewDetails }) {
   const [sellingPosition, setSellingPosition] = useState(null)
   const [cancelingPosition, setCancelingPosition] = useState(null)
   const [redeemingPosition, setRedeemingPosition] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [redeemablePositions, setRedeemablePositions] = useState([]);
-  const [quickBetMarket, setQuickBetMarket] = useState(null);
-  const [quickBetOutcome, setQuickBetOutcome] = useState(null);
-  const [showQuickBet, setShowQuickBet] = useState(false);
-
-
-  // Allowance context (for USDC and CTFC)
-  const { allowances, checkAllowances } = useAllowances()
   const [mergedPositions, setMergedPositions] = useState([])
   // Real-time price context
   const {
@@ -58,207 +45,20 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails, poly
   }
   const positionsToShow = allPositions.filter(p => !shouldHidePosition(p))
 
-  // Helper to normalize and derive fields on a merged position
-  const mergePositions = (poly = [], backend = []) => {
-    const normalize = (p) => {
-      // Build market object from nested or flat fields; don't wipe existing fields
-      const hasMarket = p?.market && Object.keys(p.market).length > 0
-      const market = hasMarket
-        ? p.market
-        : {
-            id: p.market_id ?? undefined,
-            question: p.market_name ?? undefined,
-            slug: p.market_slug ?? undefined,
-            status: p.market_status ?? undefined,
-          }
 
-      // Keep Poly string outcome if present; otherwise build from flat fields
-      let outcome = p?.outcome
-      if (outcome == null && (p.outcome_id || p.outcome_name)) {
-        outcome = {
-          id: p.outcome_id ?? undefined,
-          name: p.outcome_name ?? undefined,
-          current_price: p.current_price ?? undefined,
-          probability: p.outcome_probability ?? undefined,
-        }
-      }
-
-      return {
-        ...p,
-        market,
-        // keep outcome as-is; don't force {} to avoid rendering objects
-        outcome: outcome ?? undefined,
-      }
-    }
-
-    const computeDerived = (pos) => {
-      console.log('Computing derived position:', pos.currentValue)
-      // Preserve backend-provided current_value
-      if (pos.currentValue == null && pos.current_value != null) {
-        pos.currentValue = 0
-      }
-      const cp = getCurrentPrice(pos)
-      const sizeOrVol = pos.size ?? pos.volume
-      if (pos.currentValue == null && cp != null && sizeOrVol != null) {
-        pos.currentValue = Number(sizeOrVol) * Number(cp)
-      }
-      if (pos.redeemable == null) {
-        const hasRedemptionRecord = Array.isArray(pos.redemptions) && pos.redemptions.some(r => r.status === 'completed')
-        pos.redeemable = pos.resolved_status === 'won' && !hasRedemptionRecord
-      }
-      return pos
-    }
-
-    const keyFor = (p) =>
-      // Prefer clob_id (backend) and asset/conditionId (poly) to align the same instrument
-      p?.id  ||
-      p?.clob_id ||
-      p?.asset ||
-      p?.conditionId ||
-      `${p?.market?.id || ''}-${(p?.outcome && p?.outcome.id) || p?.outcome_id || ''}-${p?.slug || p?.market_slug || ''}`
-
-    const map = new Map()
-    const backendByClob = new Map()
-
-    // Seed with backend (authoritative) and index by clob_id
-    backend.forEach(b => {
-      const nb = computeDerived(normalize({ ...b, isDataApi: false }))
-      const kb = keyFor(nb)
-      map.set(kb, nb)
-      if (b?.clob_id) backendByClob.set(String(b.clob_id), { key: kb, value: nb })
-    })
-
-    // Adapt a poly record into our unified shape to fill missing fields (top-level only)
-    const adaptFromPoly = (polyRec, base = {}) => {
-      const out = { ...base }
-
-      // Required: conditionId as asset
-      if (polyRec.conditionId) out.conditionId = polyRec.conditionId
-      else if (out.asset == null && polyRec.asset) out.asset = polyRec.asset
-      if (out.clob_id == null) out.clob_id = polyRec.asset
-      // Required fields on top-level
-      if (out.size == null && polyRec.size != null) out.size = polyRec.size
-      if (out.negativeRisk == null && polyRec.negativeRisk != null) out.negativeRisk = polyRec.negativeRisk
-      if (polyRec.redeemable != null) out.redeemable = polyRec.redeemable
-      if (out.total_pnl == null && polyRec.cashPnl != null) out.total_pnl = Number(polyRec.cashPnl)
-      if (polyRec.cashPnl != null) out.cashPnl = Number(polyRec.cashPnl)
-      if (out.percentPnl == null && polyRec.percentPnl != null) out.percentPnl = Number(polyRec.percentPnl)
-      if (out.entry_price == null && polyRec.avgPrice != null) out.entry_price = Number(polyRec.avgPrice)
-      // Poly currentValue should override backend for now
-      if (polyRec.currentValue != null) out.currentValue = Number(polyRec.currentValue)
-      if (out.curPrice == null && polyRec.curPrice != null) out.curPrice = Number(polyRec.curPrice)
-      if (out.outcome == null && polyRec.outcome != null) out.outcome = polyRec.outcome // keep string on top-level
-
-      // Ensure a stable id for poly-only rows so React keys are defined
-      if (out.id == null) {
-        // const idSeed =
-        //   polyRec.id ||
-        //   polyRec.conditionId ||
-        //   polyRec.asset ||
-        //   polyRec.slug ||
-        //   'poly'
-        // const outcomeSeed = polyRec.outcomeIndex ?? polyRec.outcome ?? 'NA'
-        out.id = uuidv4()
-      }
-
-      // Market info (fill if missing)
-      out.market = {
-        ...(out.market || {}),
-        question: out.market?.question ?? polyRec.title,
-        icon: out.market?.icon ?? polyRec.icon,
-        slug: out.market?.slug ?? polyRec.slug,
-        eventSlug: out.market?.eventSlug ?? polyRec.eventSlug,
-        endDate: out.market?.endDate ?? polyRec.endDate,
-      }
-
-      // Do not attach any fields to out.outcome object here (per request)
-
-      return out
-    }
-
-    // Overlay poly (fill gaps, mark as data-only when no backend)
-    poly?.forEach(p => {
-      const linkId = String(p.asset || p.conditionId || '')
-      const backendMatch = linkId ? backendByClob.get(linkId) : undefined
-
-      if (backendMatch) {
-        // Merge into the existing backend entry keyed by its original key; no duplicate
-        let merged = adaptFromPoly(p, normalize({ ...backendMatch.value }))
-        merged.isDataApi = false
-        merged = computeDerived(normalize(merged))
-        map.set(backendMatch.key, merged)
-      } else {
-        // Poly-only entry (data-only)
-        const adaptedOnly = adaptFromPoly(p, {})
-        const k = keyFor(adaptedOnly)
-        let onlyPoly = computeDerived(normalize(adaptedOnly))
-        onlyPoly.isDataApi = true
-        map.set(k, onlyPoly)
-      }
-    })
-
-    return Array.from(map.values())
-  }
-
-  // New: backend fetch with original processing (dedupe outcomes, resolved status)
-  const fetchBackendPositions = async () => {
-    const response = await fetch('http://localhost:8000/api/v1/positions/')
+  // Fetch merged positions from backend
+  const fetchMergedPositions = async () => {
+    const response = await fetch('http://localhost:8000/api/v1/positions/merged')
     if (!response.ok) {
-      throw new Error('Failed to fetch positions')
+      throw new Error('Failed to fetch merged positions')
     }
-    const data = await response.json()
-
-    const processedData = data.map(position => {
-      // Dedupe outcomes by clob_id/external_id/name, keep most recently updated
-      if (position.market && Array.isArray(position.market.outcomes) && position.market.outcomes.length > 0) {
-        const outcomeGroups = position.market.outcomes.reduce((groups, outcome) => {
-          const key = outcome.clob_id || outcome.external_id || outcome.name
-          if (!groups[key] || new Date(outcome.updated_at) > new Date(groups[key].updated_at)) {
-            groups[key] = outcome
-          }
-          return groups
-        }, {})
-        position.market.outcomes = Object.values(outcomeGroups)
-
-        // Try to map the correct outcome onto the position
-        let currentOutcome = position.market.outcomes.find(o => o.id === position.outcome_id)
-        if (!currentOutcome && position.outcome?.clob_id) {
-          currentOutcome = position.market.outcomes.find(o => o.clob_id === position.outcome.clob_id)
-        }
-        if (currentOutcome) {
-          position.outcome = currentOutcome
-        }
-      }
-
-      // Update resolved_status based on market resolution and fill status
-      if (position.market && position.market.status === 'closed') {
-        const wasNeverFilled =
-          (position.volume === 0 || position.volume === null) &&
-          (position.entry_price === 0 || position.entry_price === null)
-
-        if (wasNeverFilled) {
-          position.resolved_status = 'not_filled'
-        } else {
-          const resolvedOutcome = Array.isArray(position.market.outcomes)
-            ? position.market.outcomes.find(o => o.current_price === 1.0)
-            : null
-          if (resolvedOutcome) {
-            position.market.resolved_at = position.market.updated_at
-            position.resolved_status = position.outcome_id === resolvedOutcome.id ? 'won' : 'lost'
-          }
-        }
-      }
-
-      return position
-    })
-
-    return processedData
+    return await response.json()
   }
 
   // Log the merged positions on every render (for debugging)
   console.log('Merged Positions:', mergedPositions)
 
-  // Fetch positions data from the server, then merge with poly
+  // Fetch merged positions data from the server
   useEffect(() => {
     let isMounted = true
     setLoading(true)
@@ -266,14 +66,12 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails, poly
 
     const fetchPositionsData = async () => {
       try {
-        // Fetch and process backend positions first
-        const backend = await fetchBackendPositions()
-        console.log('Fetched Positions Data:', backend)
+        // Fetch merged positions from backend
+        const mergedData = await fetchMergedPositions()
+        console.log('Fetched Merged Positions Data:', mergedData)
         if (!isMounted) return
 
-        // Merge with poly positions next
-        const merged = mergePositions(polyPositions, Array.isArray(backend) ? backend : [])
-        setMergedPositions(merged)
+        setMergedPositions(Array.isArray(mergedData) ? mergedData : [])
       } catch (err) {
         console.error('Error fetching positions:', err)
         if (isMounted) setError('Failed to load positions')
@@ -284,53 +82,9 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails, poly
 
     fetchPositionsData()
     return () => { isMounted = false }
-  }, [refreshTrigger, setMergedPositions, polyPositions])
+  }, [refreshTrigger, setMergedPositions])
 
-  // Check redeemable positions on mount and when mergedPositions change
-  useEffect(() => {
-    let isMounted = true
 
-    const checkRedeemablePositions = async () => {
-      if (!Array.isArray(positionsToShow) || positionsToShow.length === 0) {
-        if (isMounted) {
-          setRedeemablePositions([])
-        }
-        return
-      }
-
-      try {
-        // Construct the URL with multiple status filters
-        const url = new URL(`${process.env.NEXT_PUBLIC_API_URL}/positions/`)
-        ;['open', 'filled', 'won', 'lost'].forEach(s => url.searchParams.append('status', s))
-
-        const response = await fetch(url.toString())
-        const data = await response.json()
-
-        if (isMounted) {
-          setRedeemablePositions(Array.isArray(data) ? data : [])
-        }
-      } catch (error) {
-        console.error('Error checking redeemable status:', error)
-        if (isMounted) {
-          setRedeemablePositions([])
-        }
-      }
-    }
-
-    // Depend on positionsToShow (ids) to avoid unnecessary loops
-    const key = positionsToShow.map(p => p.id).sort().join(',')
-    if (key) {
-      checkRedeemablePositions()
-    } else if (isMounted) {
-      setRedeemablePositions([])
-    }
-    return () => { isMounted = false }
-  }, [mergedPositions])
-
-  // Handle allowance updates from TokenAllowance component
-  const handleAllowanceUpdated = async () => {
-    await checkAllowances()
-  }
 
   // Add minimal handler stubs to avoid reference errors
   const handleSellPosition = async (position) => {
@@ -459,6 +213,7 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails, poly
                   <TableHead>Market</TableHead>
                   <TableHead>Outcome</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Closes At</TableHead>
                   <TableHead>Entry Price</TableHead>
                   <TableHead>Current Price</TableHead>
                   <TableHead>Current Value</TableHead>
@@ -517,6 +272,20 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails, poly
 
                       <TableCell>
                         {getStatusBadge(position)}
+                      </TableCell>
+
+                      <TableCell>
+                        {position.market?.endDate ? (
+                          <div className="text-sm">
+                            {new Date(position.market.endDate).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
                       </TableCell>
 
                       <TableCell>

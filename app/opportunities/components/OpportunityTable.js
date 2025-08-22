@@ -142,6 +142,9 @@ const OpportunityTable = ({
                       Score
                     </SortableHeader>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Closes At
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -231,6 +234,19 @@ const OpportunityTable = ({
                             ? `${Math.round(opportunity.opportunity_score * 100)}%`
                             : 'N/A'}
                         </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {opportunity.market?.closes_at ? (
+                          <div className="text-sm text-gray-900">
+                            {new Date(opportunity.market.closes_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {getStatusBadge(opportunity.status || 'active')}

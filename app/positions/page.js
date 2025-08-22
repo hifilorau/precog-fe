@@ -166,7 +166,6 @@ function PositionsPageContent() {
       <PositionsTable 
         refreshTrigger={refreshTrigger} 
         onViewDetails={handleViewPositionDetails}
-        polyPositions={positions}
       />
 
       {/* Information Card */}
