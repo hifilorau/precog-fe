@@ -3,10 +3,11 @@
 import React, { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock } from 'lucide-react'
+import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock, Edit, Plus } from 'lucide-react'
+import EditPositionModal from './EditPositionModal'
+import QuickBetModal from './QuickBetModal'
 
 import {
   formatPrice,
@@ -18,19 +19,30 @@ import {
   formatPnL,
 } from '@/app/utils/formatters'
 import { useRealTimePrices } from '@/hooks/useRealTimePrices'
+import { usePeriodicBalance } from '@/hooks/usePeriodicBalance'
+import { useStateContext } from '@/app/store'
 
-export default function PositionsTable({ refreshTrigger = 0, onViewDetails }) {
+export default function PositionsTable({ refreshTrigger = 0 }) {
   const [sellingPosition, setSellingPosition] = useState(null)
   const [cancelingPosition, setCancelingPosition] = useState(null)
   const [redeemingPosition, setRedeemingPosition] = useState(null)
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
   const [mergedPositions, setMergedPositions] = useState([])
+  const [editingPosition, setEditingPosition] = useState(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [buyMorePosition, setBuyMorePosition] = useState(null)
+  const [showBuyMoreModal, setShowBuyMoreModal] = useState(false)
+  const { updateState } = useStateContext()
+  
   // Real-time price context
   const {
-    pricesLoading,
+    currentPrices,
+    loading: pricesLoading,
     refreshPrices,
-  } = useRealTimePrices()
+  } = useRealTimePrices(mergedPositions, 'positions', 'position')
+  
+  // Periodic balance refresh (every 30 seconds)
+  usePeriodicBalance(30000, true)
 
   // Derive positions to show with a strict filter on zero-value closed/resolved-lost
   const allPositions = Array.isArray(mergedPositions) ? mergedPositions : []
@@ -57,11 +69,12 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails }) {
 
   // Log the merged positions on every render (for debugging)
   console.log('Merged Positions:', mergedPositions)
+  console.log('Current Prices from Hook:', currentPrices)
+  console.log('Prices Loading:', pricesLoading)
 
   // Fetch merged positions data from the server
   useEffect(() => {
     let isMounted = true
-    setLoading(true)
     setError('')
 
     const fetchPositionsData = async () => {
@@ -71,18 +84,24 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails }) {
         console.log('Fetched Merged Positions Data:', mergedData)
         if (!isMounted) return
 
-        setMergedPositions(Array.isArray(mergedData) ? mergedData : [])
+        const positions = Array.isArray(mergedData) ? mergedData : []
+        setMergedPositions(positions)
+        // Update global state with merged positions
+        updateState({ mergedPositions: positions })
       } catch (err) {
         console.error('Error fetching positions:', err)
         if (isMounted) setError('Failed to load positions')
-      } finally {
-        if (isMounted) setLoading(false)
       }
     }
 
     fetchPositionsData()
     return () => { isMounted = false }
-  }, [refreshTrigger, setMergedPositions])
+  }, [refreshTrigger, setMergedPositions, updateState])
+
+  // Update global state with current prices when they change
+  useEffect(() => {
+    updateState({ currentPrices })
+  }, [currentPrices, updateState])
 
 
 
@@ -161,6 +180,56 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails }) {
     }
   }
 
+  const handleEditPosition = (position) => {
+    setEditingPosition(position)
+    setShowEditModal(true)
+  }
+
+  const handleCloseEditModal = () => {
+    setShowEditModal(false)
+    setEditingPosition(null)
+  }
+
+  const handleEditSuccess = () => {
+    // Refresh positions after successful edit
+    const fetchPositionsData = async () => {
+      try {
+        const mergedData = await fetchMergedPositions()
+        const positions = Array.isArray(mergedData) ? mergedData : []
+        setMergedPositions(positions)
+        updateState({ mergedPositions: positions })
+      } catch (err) {
+        console.error('Error fetching positions after edit:', err)
+      }
+    }
+    fetchPositionsData()
+  }
+
+  const handleBuyMore = (position) => {
+    setBuyMorePosition(position)
+    setShowBuyMoreModal(true)
+  }
+
+  const handleCloseBuyMoreModal = () => {
+    setShowBuyMoreModal(false)
+    setBuyMorePosition(null)
+  }
+
+  const handleBuyMoreSuccess = () => {
+    // Refresh positions after successful buy
+    const fetchPositionsData = async () => {
+      try {
+        const mergedData = await fetchMergedPositions()
+        const positions = Array.isArray(mergedData) ? mergedData : []
+        setMergedPositions(positions)
+        updateState({ mergedPositions: positions })
+      } catch (err) {
+        console.error('Error fetching positions after buy:', err)
+      }
+    }
+    fetchPositionsData()
+  }
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -190,14 +259,6 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails }) {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        
-        {/* {!allowances.usdc_for_exchange?.approved || !allowances.ctf_for_exchange?.approved ? (
-          <TokenAllowance 
-            position={positions[0]} 
-            onAllowanceUpdated={handleAllowanceUpdated} 
-            className="mb-4"
-          />
-        ) : null} */}
 
         {positionsToShow.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
@@ -206,293 +267,376 @@ export default function PositionsTable({ refreshTrigger = 0, onViewDetails }) {
             <p className="text-sm">Place your first bet to get started</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Market</TableHead>
-                  <TableHead>Outcome</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Closes At</TableHead>
-                  <TableHead>Entry Price</TableHead>
-                  <TableHead>Current Price</TableHead>
-                  <TableHead>Current Value</TableHead>
-                  <TableHead>Volume / Size</TableHead>
-                  <TableHead>PnL</TableHead>
-                  <TableHead>Targets</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {positionsToShow.map((position) => {
-                  const currentPrice = getCurrentPrice(position)
-                  const pnlData = (position.total_pnl != null || position.percentPnl != null)
-                    ? { pnl: position.total_pnl ?? null, pnlPercent: position.percentPnl ?? null }
-                    : calculatePnL(position, currentPrice)
+          <div className="space-y-4">
+            {positionsToShow.map((position) => {
+              const currentPrice = currentPrices.get(position.outcome_id) || getCurrentPrice(position)
+              // Always calculate PnL with real-time prices for accuracy
+              const pnlData = calculatePnL(position, currentPrice)
 
-                  const derivedCurrentValue = Number(
-                    position?.currentValue ??
-                    // TODO: add fallback logic here (e.g., position.size * currentPrice)
-                    0
-                  );
+              const derivedCurrentValue = Number(
+                position?.currentValue ??
+                (position.size && currentPrice ? position.size * currentPrice : 0)
+              );
 
-                  const rowKey =
-                    position.clob_id ||
-                    position.asset ||
-                    position.id ||
-                    `${position.slug || position.market?.slug || 'row'}:${position.outcomeIndex ?? position.outcome?.id ?? position.outcome ?? ''}`
+              const rowKey =
+                position.clob_id ||
+                position.asset ||
+                position.id ||
+                `${position.slug || position.market?.slug || 'row'}:${position.outcomeIndex ?? position.outcome?.id ?? position.outcome ?? ''}`
 
-                  const outcomeLabel =
-                    typeof position.outcome === 'string'
-                      ? position.outcome
-                      : (position.outcome?.name ?? 'Unknown Outcome')
+              const outcomeLabel =
+                typeof position.outcome === 'string'
+                  ? position.outcome
+                  : (position.outcome?.name ?? 'Unknown Outcome')
 
-                  return (
-                    <TableRow key={rowKey}>
-                      <TableCell className="max-w-xs">
-                        <div className="truncate" title={position.market?.question}>
-                          {position.market?.question || 'Unknown Market'}
-                        </div>
-                        {position.market?.status === 'closed' && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            {position.resolved_status ? (
-                              <span className={position.resolved_status === 'won' ? 'text-green-600' : 'text-red-600'}>
-                                ✓ Resolved
-                              </span>
-                            ) : (
-                              <span className="text-orange-600">⏰ Closed</span>
-                            )}
-                          </div>
-                        )}
-                      </TableCell>
-
-                      <TableCell>
+              return (
+                <div key={rowKey} className="border border-border rounded-lg p-4 bg-card hover:bg-muted/50 transition-colors">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+                    {/* Market & Outcome */}
+                    <div className="lg:col-span-3">
+                      <div className="font-medium text-sm truncate mb-1" title={position.market?.question}>
+                        {position.market?.question || 'Unknown Market'}
+                      </div>
+                      <div className="text-sm text-muted-foreground mb-1">
                         {outcomeLabel}
-                      </TableCell>
-
-                      <TableCell>
-                        {getStatusBadge(position)}
-                      </TableCell>
-
-                      <TableCell>
-                        {position.market?.endDate ? (
-                          <div className="text-sm">
-                            {new Date(position.market.endDate).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric'
-                            })}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </TableCell>
-
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div>{formatPrice(position.entry_price)}</div>
-                          {(() => {
-                            const riskLevel = getStopLossRiskLevel(position, currentPrice)
-                            if (riskLevel) {
-                              return (
-                                <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${riskLevel.color}`}>
-                                  {riskLevel.message}
-                                </div>
-                              )
-                            }
-                            return null
-                          })()} 
-                        </div>
-                      </TableCell>
-                      
-                      <TableCell className={pricesLoading ? 'opacity-70' : ''}>
-                        {pricesLoading ? (
-                          <div className="flex items-center gap-1">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            {formatPrice(position.outcome?.probability)}
-                          </div>
-                        ) : (
-                          formatPrice(currentPrice)
-                        )}
-                      </TableCell>
-
-                      <TableCell>
-                        {derivedCurrentValue != null ? `$${derivedCurrentValue.toFixed(2)}` : '-'}
-                      </TableCell>
-                      
-                      <TableCell>
-                        {/* show volume and size side-by-side */}
-                        {formatVolume(position.volume)}{position.size != null ? ` / ${formatVolume(position.size)}` : ''}
-                      </TableCell>
-                      
-                      <TableCell>
-                        {pnlData ? formatPnL(pnlData.pnl, pnlData.pnlPercent) : '-'}
-                      </TableCell>
-                      
-                      <TableCell>
-                        <div className="space-y-1 text-xs">
-                          {position.sell_price && (
-                            <div className="flex items-center gap-1 text-green-600">
-                              <Target className="h-3 w-3" />
-                              {formatPrice(position.sell_price)}
-                            </div>
-                          )}
-                          {position.stop_loss_price && (
-                            <div className="flex items-center gap-1 text-red-600">
-                              <Shield className="h-3 w-3" />
-                              {formatPrice(position.stop_loss_price)}
-                            </div>
+                      </div>
+                      {position.market?.status === 'closed' && (
+                        <div className="text-xs">
+                          {position.resolved_status ? (
+                            <span className={position.resolved_status === 'won' ? 'text-green-600' : 'text-red-600'}>
+                              ✓ Resolved
+                            </span>
+                          ) : (
+                            <span className="text-orange-600">⏰ Closed</span>
                           )}
                         </div>
-                      </TableCell>
-                      
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onViewDetails && onViewDetails(position.id)}
-                          >
-                            View Details
-                          </Button>
-                          
-                          {(() => {
-                            // If current value is zero, show Lost (replace Claim Winnings)
-                            const isLostValue = derivedCurrentValue != null && Number(derivedCurrentValue) === 0
-                            if (isLostValue) {
-                              return (
-                                <Button variant="destructive" size="sm" disabled>
-                                  Lost
-                                </Button>
-                              );
-                            }
+                      )}
+                    </div>
 
-                            // Redeemable positions with non-zero current value -> Claim Winnings
-                            const canRedeem = !!position.redeemable && !isLostValue
-                            if (canRedeem) {
-                              return (
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  onClick={() => handleRedeemPosition(position)}
-                                  disabled={redeemingPosition === position.id}
-                                  className="bg-green-600 hover:bg-green-700 text-white"
-                                >
-                                  {redeemingPosition === position.id ? (
-                                    <>
-                                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                      Redeeming...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <DollarSign className="h-3 w-3 mr-1" />
-                                      Claim Winnings
-                                    </>
-                                  )}
-                                </Button>
-                              );
-                            }
+                    {/* Status & Close Date */}
+                    <div className="lg:col-span-2">
+                      <div className="mb-2">{getStatusBadge(position)}</div>
+                      {position.market?.endDate ? (
+                        <div className="text-xs text-muted-foreground">
+                          Closes: {new Date(position.market.endDate).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground">No end date</div>
+                      )}
+                    </div>
 
-                            // Open/filled positions (not resolved) and not data-only -> allow Sell
-                            const isFilled = position.status === 'filled'
-                              && (!position.resolved_status || position.resolved_status === '')
-                              && !position.isDataApi
-                            if (isFilled) {
-                              const riskLevel = getStopLossRiskLevel(position, currentPrice);
-                              const isHighRisk = riskLevel && (riskLevel.level === 'crash' || riskLevel.level === 'high');
+                    {/* Prices */}
+                    <div className="lg:col-span-2">
+                      <div className="text-sm space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Entry:</span>
+                          <span className="font-medium">{formatPrice(position.entry_price)}</span>
+                        </div>
+                        <div className={`flex justify-between items-center ${pricesLoading ? 'opacity-70' : ''}`}>
+                          <span className="text-muted-foreground">Current:</span>
+                          {pricesLoading ? (
+                            <div className="flex items-center gap-1">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <span className="font-medium">{formatPrice(position.outcome?.probability)}</span>
+                            </div>
+                          ) : (
+                            <span className="font-medium">{formatPrice(currentPrice)}</span>
+                          )}
+                        </div>
+                      </div>
+                      {(() => {
+                        const riskLevel = getStopLossRiskLevel(position, currentPrice)
+                        if (riskLevel) {
+                          return (
+                            <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border mt-2 ${riskLevel.color}`}>
+                              {riskLevel.message}
+                            </div>
+                          )
+                        }
+                        return null
+                      })()}
+                    </div>
+
+                    {/* Value & Volume */}
+                    <div className="lg:col-span-2">
+                      <div className="text-sm space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Value:</span>
+                          <span className="font-medium">
+                            {derivedCurrentValue != null ? `$${derivedCurrentValue.toFixed(2)}` : '-'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Volume:</span>
+                          <span className="font-medium text-xs">
+                            {formatVolume(position.volume)}{position.size != null ? ` / ${formatVolume(position.size)}` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* PnL */}
+                    <div className="lg:col-span-1">
+                      <div className="text-sm">
+                        <div className="text-muted-foreground mb-1 text-xs">PnL</div>
+                        <div className="font-medium">
+                          {pnlData ? formatPnL(pnlData.pnl, pnlData.pnlPercent) : '-'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Targets */}
+                    <div className="lg:col-span-1">
+                      <div className="space-y-1 text-xs">
+                        {position.sell_price ? (
+                          <div className="flex items-center gap-1 text-green-600">
+                            <Target className="h-3 w-3" />
+                            <span>{formatPrice(position.sell_price)}</span>
+                          </div>
+                        ) : (
+                          <div className="text-muted-foreground">No target</div>
+                        )}
+                        {position.stop_loss_price ? (
+                          <div className="flex items-center gap-1 text-red-600">
+                            <Shield className="h-3 w-3" />
+                            <span>{formatPrice(position.stop_loss_price)}</span>
+                          </div>
+                        ) : (
+                          <div className="text-muted-foreground">No stop</div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="lg:col-span-1">
+                      <div className="flex flex-col gap-2">
+                        {(() => {
+                          // If current value is zero, show Lost (replace Claim Winnings)
+                          const isLostValue = derivedCurrentValue != null && Number(derivedCurrentValue) === 0
+                          if (isLostValue) {
+                            // Check if market is still open for trading
+                            const isMarketOpen = position.market?.status !== 'closed' && position.market?.status !== 'resolved';
+                            
+                            if (isMarketOpen) {
                               return (
-                                <>
-                                  <Button
-                                    variant={isHighRisk ? "destructive" : "outline"}
-                                    size="sm"
-                                    onClick={() => handleSellPosition(position)}
-                                    disabled={sellingPosition === position.id}
-                                    className={isHighRisk ? "animate-pulse" : ""}
-                                  >
-                                    {sellingPosition === position.id ? (
-                                      <>
-                                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                        Selling...
-                                      </>
-                                    ) : (
-                                      <>
-                                        {isHighRisk && <Shield className="h-3 w-3 mr-1" />}
-                                        {isHighRisk ? 'EMERGENCY SELL' : 'Sell'}
-                                      </>
-                                    )}
+                                <div className="flex flex-col gap-1">
+                                  <Button variant="destructive" size="sm" disabled>
+                                    Lost
                                   </Button>
-                                  {riskLevel && riskLevel.level === 'crash' && (
-                                    <div className="flex items-center gap-1 text-xs text-red-600 font-medium">
-                                      🚨 CRASH DETECTED!
-                                    </div>
-                                  )}
-                                </>
-                              );
-                            }
-
-                            // Pending: show Pending label and a Cancel button for open positions
-                            if (position.status === 'open' || position.status === 'not_filled') {
-                              return (
-                                <div className="flex items-center gap-2">
-                                  <div className="flex items-center gap-1 text-xs text-gray-500">
-                                    <Clock className="h-3 w-3" />
-                                    Pending
-                                  </div>
-                                  {position.status === 'open' && !position.isDataApi && (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleCancelOrder(position.id)}
-                                      disabled={cancelingPosition === position.id}
-                                    >
-                                      {cancelingPosition === position.id ? (
-                                        <>
-                                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                          Cancelling...
-                                        </>
-                                      ) : (
-                                        'Cancel'
-                                      )}
-                                    </Button>
-                                  )}
-                                </div>
-                              );
-                            }
-
-                            // Already redeemed (explicit)
-                            const hasRedemptionRecord = position.redemptions && position.redemptions.length > 0 && 
-                              position.redemptions.some(r => r.status === 'completed');
-                            if (position.resolved_status === 'won' && hasRedemptionRecord) {
-                              return (
-                                <div className="flex items-center gap-1 text-xs text-green-600">
-                                  <DollarSign className="h-3 w-3" />
-                                  Already Redeemed
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleBuyMore(position)}
+                                    className="text-xs"
+                                  >
+                                    <Plus className="h-3 w-3 mr-1" />
+                                    Buy More
+                                  </Button>
                                 </div>
                               );
                             }
                             
-                            // Lost positions by resolution (if not captured by value==0)
-                            if (position.resolved_status === 'lost') {
+                            return (
+                              <Button variant="destructive" size="sm" disabled>
+                                Lost
+                              </Button>
+                            );
+                          }
+
+                          // Redeemable positions with non-zero current value -> Claim Winnings
+                          const canRedeem = !!position.redeemable && !isLostValue
+                          if (canRedeem) {
+                            return (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => handleRedeemPosition(position)}
+                                disabled={redeemingPosition === position.id}
+                                className="bg-green-600 hover:bg-green-700 text-white"
+                              >
+                                {redeemingPosition === position.id ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                    Redeeming...
+                                  </>
+                                ) : (
+                                  <>
+                                    <DollarSign className="h-3 w-3 mr-1" />
+                                    Claim
+                                  </>
+                                )}
+                              </Button>
+                            );
+                          }
+
+                          // Open/filled positions (not resolved) and not data-only -> allow Sell
+                          const isFilled = position.status === 'filled'
+                            && (!position.resolved_status || position.resolved_status === '')
+                            && !position.isDataApi
+                          if (isFilled) {
+                            const riskLevel = getStopLossRiskLevel(position, currentPrice);
+                            const isHighRisk = riskLevel && (riskLevel.level === 'crash' || riskLevel.level === 'high');
+                            return (
+                              <>
+                                <Button
+                                  variant={isHighRisk ? "destructive" : "outline"}
+                                  size="sm"
+                                  onClick={() => handleSellPosition(position)}
+                                  disabled={sellingPosition === position.id}
+                                  className={isHighRisk ? "animate-pulse" : ""}
+                                >
+                                  {sellingPosition === position.id ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                      Selling...
+                                    </>
+                                  ) : (
+                                    <>
+                                      {isHighRisk && <Shield className="h-3 w-3 mr-1" />}
+                                      {isHighRisk ? 'SELL!' : 'Sell'}
+                                    </>
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditPosition(position)}
+                                  disabled={sellingPosition === position.id}
+                                  className="mt-1"
+                                >
+                                  <Edit className="h-3 w-3 mr-1" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleBuyMore(position)}
+                                  disabled={sellingPosition === position.id}
+                                  className="mt-1"
+                                >
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  Buy More
+                                </Button>
+                                {riskLevel && riskLevel.level === 'crash' && (
+                                  <div className="flex items-center gap-1 text-xs text-red-600 font-medium">
+                                    🚨 CRASH!
+                                  </div>
+                                )}
+                              </>
+                            );
+                          }
+
+                          // Pending: show Pending label and a Cancel button for open positions
+                          if (position.status === 'open' || position.status === 'not_filled') {
+                            return (
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                  <Clock className="h-3 w-3" />
+                                  Pending
+                                </div>
+                                {position.status === 'open' && !position.isDataApi && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleCancelOrder(position.id)}
+                                    disabled={cancelingPosition === position.id}
+                                  >
+                                    {cancelingPosition === position.id ? (
+                                      <>
+                                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                        Cancel...
+                                      </>
+                                    ) : (
+                                      'Cancel'
+                                    )}
+                                  </Button>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          // Already redeemed (explicit)
+                          const hasRedemptionRecord = position.redemptions && position.redemptions.length > 0 && 
+                            position.redemptions.some(r => r.status === 'completed');
+                          if (position.resolved_status === 'won' && hasRedemptionRecord) {
+                            return (
+                              <div className="flex items-center gap-1 text-xs text-green-600">
+                                <DollarSign className="h-3 w-3" />
+                                Redeemed
+                              </div>
+                            );
+                          }
+                          
+                          // Lost positions by resolution (if not captured by value==0)
+                          if (position.resolved_status === 'lost') {
+                            // Check if market is still open for trading
+                            const isMarketOpen = position.market?.status !== 'closed' && position.market?.status !== 'resolved';
+                            
+                            if (isMarketOpen) {
                               return (
-                                <div className="flex items-center gap-1 text-xs text-red-600">
-                                  Lost
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex items-center gap-1 text-xs text-red-600">
+                                    Lost
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleBuyMore(position)}
+                                    className="text-xs"
+                                  >
+                                    <Plus className="h-3 w-3 mr-1" />
+                                    Buy More
+                                  </Button>
                                 </div>
                               );
                             }
+                            
+                            return (
+                              <div className="flex items-center gap-1 text-xs text-red-600">
+                                Lost
+                              </div>
+                            );
+                          }
 
-                            return null;
-                          })()}
-
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
+                          return null;
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
       </CardContent>
+      
+      {/* Edit Position Modal */}
+      <EditPositionModal
+        position={editingPosition}
+        isOpen={showEditModal}
+        onClose={handleCloseEditModal}
+        onSuccess={handleEditSuccess}
+      />
+      
+      {/* Buy More Modal */}
+      {buyMorePosition && (
+        <QuickBetModal
+          market={buyMorePosition.market}
+          outcome={{
+            id: buyMorePosition.outcome_id,
+            name: typeof buyMorePosition.outcome === 'string' 
+              ? buyMorePosition.outcome 
+              : (buyMorePosition.outcome?.name ?? 'Unknown Outcome'),
+            probability: buyMorePosition.outcome?.probability
+          }}
+          isOpen={showBuyMoreModal}
+          onClose={handleCloseBuyMoreModal}
+          onSuccess={handleBuyMoreSuccess}
+        />
+      )}
     </Card>
   )
 }

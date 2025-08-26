@@ -142,7 +142,12 @@ class PolymarketPriceService {
         tokenId = item.outcome.clob_id;
         outcomeId = item.outcome.id;
       } 
-      // Handle position format
+      // Handle position format with clob_id directly on item
+      else if (item.clob_id && item.outcome_id) {
+        tokenId = item.clob_id;
+        outcomeId = item.outcome_id;
+      }
+      // Handle position format with nested outcome
       else if (item.outcome_id && item.outcome?.clob_id) {
         tokenId = item.outcome.clob_id;
         outcomeId = item.outcome_id;

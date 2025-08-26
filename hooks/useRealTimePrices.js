@@ -37,17 +37,8 @@ export const useRealTimePrices = (items, key, type = 'opportunity') => {
     }
   }, [items, type]);
 
-  // Use a ref to track the initial mount
-  const isInitialMount = useRef(true);
-
   // Fetch prices on mount and when items or key changes
   useEffect(() => {
-    // Skip the initial mount if we already have prices
-    if (isInitialMount.current && currentPrices.size > 0) {
-      isInitialMount.current = false;
-      return;
-    }
-    
     fetchPrices();
     
     // Set up interval for refreshing prices (e.g., every 15 seconds)
@@ -55,7 +46,7 @@ export const useRealTimePrices = (items, key, type = 'opportunity') => {
     
     // Clean up interval on unmount or when dependencies change
     return () => clearInterval(intervalId);
-  }, [fetchPrices, key, currentPrices.size]);
+  }, [fetchPrices, key]);
 
   // Refresh prices manually
   const refreshPrices = useCallback(() => {

@@ -8,6 +8,8 @@ const StateContext = createContext(undefined);
 const initialState = {
   walletAddress: null,
   balance: null,
+  mergedPositions: [],
+  currentPrices: new Map(),
   updateState: () => {},
   resetState: () => {},
 };

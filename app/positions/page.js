@@ -1,14 +1,16 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus, RefreshCw } from 'lucide-react'
 import { AllowanceProvider } from '@/hooks/useAllowances'
 import PositionsTable from './components/PositionsTable'
 import PlaceBetForm from './components/PlaceBetForm'
 import PositionDetails from './components/PositionDetails'
+import StatsCards from './components/StatsCards'
 import useUserPositions from '@/hooks/useUserPositions'
+import { useStateContext } from '@/app/store'
 
 function PositionsPageContent() {
   const [showPlaceBetForm, setShowPlaceBetForm] = useState(false)
@@ -17,6 +19,7 @@ function PositionsPageContent() {
   const [selectedOutcome, setSelectedOutcome] = useState(null)
   const [selectedPositionId, setSelectedPositionId] = useState(null)
   const [showPositionDetails, setShowPositionDetails] = useState(false)
+  const { mergedPositions } = useStateContext()
 
   const handlePlaceBetSuccess = (position) => {
     setShowPlaceBetForm(false)
@@ -123,44 +126,8 @@ function PositionsPageContent() {
         </div>
       </div>
 
-      {/* Positions Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">
-              Open Positions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">-</div>
-            <p className="text-xs text-gray-500">Active trades</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">
-              Total P&L
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">-</div>
-            <p className="text-xs text-gray-500">Unrealized gains/losses</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">
-              Auto Triggers
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">-</div>
-            <p className="text-xs text-gray-500">Active stop loss/sell targets</p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Stats Cards */}
+      <StatsCards mergedPositions={mergedPositions || []} />
 
       {/* Positions Table */}
       <PositionsTable 
