@@ -36,6 +36,7 @@ export default function QuickBetModal({ market, outcome, isOpen, onClose }) {
           
           <div className="py-4">
             <PlaceBetForm 
+              key={`${market?.id}-${outcome?.id}`} 
               market={market}
               outcome={outcome}
               onSuccess={handleSuccess}

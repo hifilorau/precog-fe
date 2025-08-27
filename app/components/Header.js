@@ -3,6 +3,7 @@
 import Link from 'next/link';
 // import { useSession, signIn, signOut } from 'next-auth/react';
 import WalletBalance from './WalletBalance';
+import CryptoTicker from './CryptoTicker';
 
 export default function Header() {
   // const { data: session, status } = useSession();
@@ -56,6 +57,7 @@ export default function Header() {
           </div>
         </div>
       </div>
+      <CryptoTicker />
     </header>
   );
 }

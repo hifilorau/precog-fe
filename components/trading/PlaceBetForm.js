@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo,useCallback } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import React, { useState, useRef, useEffect, useMemo,useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -108,39 +107,45 @@ export default function PlaceBetForm({
     }
   }, [updateState]);
 
-  // Memoize the updateShareQuantity function
-  const updateShareQuantity = useCallback((price) => {
-    if (!price || !balance) return;
-    const shares = calculateShares(balance, parseFloat(price));
-    updateFormData({ volume: shares.toString() });
-  }, [balance, updateFormData]);
 
-  // Convert between display value (e.g., 90.5) and internal value (e.g., 0.905)
-  const parsePriceInput = (value) => {
-    if (!value) return '';
-    const num = parseFloat(value);
-    return isNaN(num) ? '' : (num / 100).toFixed(4);
-  };
-
-  const formatPriceDisplay = (value) => {
-    if (!value) return '';
-    const num = parseFloat(value);
-    return isNaN(num) ? '' : (num * 100).toFixed(2);
-  };
-
-  // Stable input change handler
+  // Stable input change handler with proper validation
   const handleInputChange = useCallback((e) => {
     const { name, value } = e.target;
+    
+    // Allow empty values for better UX
+    if (value === '') {
+      updateFormData({ [name]: '' });
+      return;
+    }
+    
+    // Validate numeric inputs
+    if (['max_bid_price', 'sell_price', 'stop_loss_price'].includes(name)) {
+      // Allow partial decimal input (e.g., "1.", "1.2")
+      const decimalPattern = /^\d*\.?\d*$/;
+      if (!decimalPattern.test(value)) {
+        return; // Don't update if invalid pattern
+      }
+    }
+    
+    // Volume should only allow integers
+    if (name === 'volume') {
+      const integerPattern = /^\d*$/;
+      if (!integerPattern.test(value)) {
+        return; // Don't update if invalid pattern
+      }
+    }
     
     // Update the form data
     updateFormData(prev => {
       const newData = { ...prev, [name]: value };
       
-      // Recalculate shares when price changes
-      if (name === 'max_bid_price' && value) {
-        const price = parseFloat(value) / 100; // Convert to decimal for calculation
-        const shares = calculateShares(balance || 0, price);
-        newData.volume = shares.toString();
+      // Recalculate shares when max bid price changes and has valid value
+      if (name === 'max_bid_price' && value && !isNaN(parseFloat(value))) {
+        const price = parseFloat(value) / 100; // Convert percentage to decimal
+        if (price > 0 && price <= 1) { // Valid price range
+          const shares = calculateShares(balance || 0, price);
+          newData.volume = shares.toString();
+        }
       }
       
       return newData;
@@ -152,10 +157,15 @@ export default function PlaceBetForm({
     e?.preventDefault();
     const newBalance = await fetchWalletBalance();
     if (newBalance > 0) {
-      updateShareQuantity(parseFloat(formData.max_bid_price || '0'));
+      // Get current form data without depending on it in useCallback
+      const currentPrice = parseFloat(document.getElementById('max_bid_price')?.value || '0');
+      if (currentPrice > 0) {
+        const shares = calculateShares(newBalance, currentPrice / 100); // Convert percentage to decimal
+        updateFormData(prev => ({ ...prev, volume: shares.toString() }));
+      }
       toast.success('Balance refreshed');
     }
-  }, [fetchWalletBalance, formData.max_bid_price, updateShareQuantity]);
+  }, [fetchWalletBalance, updateFormData]);
 
   // Auto-fill price fields based on order book data and historical data
   const autoFillPrices = () => {
@@ -526,32 +536,32 @@ export default function PlaceBetForm({
   
   const currentPrice = outcome.probability || 0.5
 
-  // Set initial values when market/outcome changes
+  // Set initial values when outcome changes (not on every render)
   useEffect(() => {
-    if (!outcome) return;
+    if (!outcome?.id) return;
     
-    const price = outcome.current_price || 0.5;
+    const decimalPrice = outcome.current_price || outcome.probability || 0.5;
+    const percentagePrice = (decimalPrice * 100).toFixed(2); // Convert 0.65 -> "65.00"
     
-    // Only update if the price is different to prevent unnecessary re-renders
+    // Use functional update to avoid dependency on updateFormData
     setFormData(prev => {
-      if (prev.max_bid_price === price.toFixed(2)) return prev;
-      return { ...prev, max_bid_price: price.toFixed(2) };
+      // Only update if values are actually different
+      const needsUpdate = prev.max_bid_price !== percentagePrice;
+      if (!needsUpdate) return prev;
+      
+      const shares = balance > 0 ? calculateShares(balance, decimalPrice) : 0;
+      
+      return {
+        ...prev,
+        max_bid_price: percentagePrice,
+        volume: shares > 0 ? shares.toString() : prev.volume
+      };
     });
     
-    // Fetch balance and update shares in a separate effect
-    const initializeForm = async () => {
-      const currentBalance = balance || await fetchWalletBalance();
-      if (currentBalance > 0) {
-        updateShareQuantity(price);
-      }
-    };
-    
-    initializeForm();
-    
-    // Include all dependencies used in the effect
-  }, [outcome, balance, fetchWalletBalance, updateShareQuantity, updateFormData]);
+    // Only depend on outcome ID and specific price fields
+  }, [outcome?.id, outcome?.current_price, outcome?.probability, balance]);
 
-  const FormContent = () => (
+  return (
     <div className={className}>
       <h3 className='text-lg font-semibold mb-4'>Place Limit Order</h3>
       {showCard && (
@@ -659,10 +669,8 @@ export default function PlaceBetForm({
             <Input
               id="max_bid_price"
               name="max_bid_price"
-              type="number"
-              step="0.01"
-              min="0.01"
-              max="99.99"
+              type="text"
+              inputMode="decimal"
               value={formData.max_bid_price}
               onChange={handleInputChange}
               ref={inputRefs.max_bid_price}
@@ -721,10 +729,8 @@ export default function PlaceBetForm({
               <Input
                 id="max_bid_price"
                 name="max_bid_price"
-                type="number"
-                step="0.1"
-                min="1"
-                max="99.5"
+                type="text"
+                inputMode="decimal"
                 value={formData.max_bid_price}
                 onChange={handleInputChange}
                 ref={inputRefs.max_bid_price}
@@ -741,8 +747,8 @@ export default function PlaceBetForm({
               <Input
                 id="volume"
                 name="volume"
-                type="number"
-                min="1"
+                type="text"
+                inputMode="numeric"
                 value={formData.volume}
                 onChange={handleInputChange}
                 ref={inputRefs.volume}
@@ -765,10 +771,8 @@ export default function PlaceBetForm({
             <Input
               id="sell_price"
               ref={inputRefs.sell_price}
-              type="number"
-              step="0.01"
-              min="0.01"
-              max="99.99"
+              type="text"
+              inputMode="decimal"
               value={formData.sell_price}
               name="sell_price"
               onChange={handleInputChange}
@@ -806,10 +810,8 @@ export default function PlaceBetForm({
             <Input
               id="stop_loss_price"
               ref={inputRefs.stop_loss_price}
-              type="number"
-              step="0.01"
-              min="0.01"
-              max="99.99"
+              type="text"
+              inputMode="decimal"
               value={formData.stop_loss_price}
               name="stop_loss_price"
               onChange={handleInputChange}
@@ -868,27 +870,4 @@ export default function PlaceBetForm({
       </form>
     </div>
   )
-
-  if (showCard) {
-    return (
-      <Card className="w-full max-w-2xl mx-auto">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
-            Place Bet
-          </CardTitle>
-          <div className="text-sm text-gray-600">
-            <p><strong>Market:</strong> {market.question}</p>
-            <p><strong>Outcome:</strong> {outcome.name}</p>
-            <p><strong>Current Price:</strong> {(currentPrice * 100).toFixed(1)}¢</p>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <FormContent />
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return <FormContent />
 }

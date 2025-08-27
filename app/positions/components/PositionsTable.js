@@ -622,21 +622,26 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
       />
       
       {/* Buy More Modal */}
-      {buyMorePosition && (
-        <QuickBetModal
-          market={buyMorePosition.market}
-          outcome={{
-            id: buyMorePosition.outcome_id,
-            name: typeof buyMorePosition.outcome === 'string' 
-              ? buyMorePosition.outcome 
-              : (buyMorePosition.outcome?.name ?? 'Unknown Outcome'),
-            probability: buyMorePosition.outcome?.probability
-          }}
-          isOpen={showBuyMoreModal}
-          onClose={handleCloseBuyMoreModal}
-          onSuccess={handleBuyMoreSuccess}
-        />
-      )}
+      {buyMorePosition && (() => {
+        const currentPrice = currentPrices.get(buyMorePosition.outcome_id) || getCurrentPrice(buyMorePosition);
+        return (
+          <QuickBetModal
+            market={buyMorePosition.market}
+            outcome={{
+              id: buyMorePosition.outcome_id,
+              clob_id: buyMorePosition.clob_id, // Required for PlaceBetForm functionality
+              name: typeof buyMorePosition.outcome === 'string' 
+                ? buyMorePosition.outcome 
+                : (buyMorePosition.outcome?.name ?? 'Unknown Outcome'),
+              probability: currentPrice, // Use real-time current price
+              current_price: currentPrice
+            }}
+            isOpen={showBuyMoreModal}
+            onClose={handleCloseBuyMoreModal}
+            onSuccess={handleBuyMoreSuccess}
+          />
+        );
+      })()}
     </Card>
   )
 }
