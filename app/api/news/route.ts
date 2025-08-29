@@ -26,7 +26,7 @@ export async function GET(request: Request) {
         'n.image_url as imageUrl',
         'n.published_at as publishedAt',
         'n.source_name as sourceName',
-        db.raw('json_agg(distinct jsonb_build_object(\'id\', t.id, \'label\', t.label)) as tags'
+        db.raw('json_agg(distinct jsonb_build_object(\'id\', t.id, \'label\', t.label)) as tags')
       ])
       .groupBy(['n.id', 'n.title', 'n.description', 'n.url', 'n.image_url', 'n.published_at', 'n.source_name']);
     

@@ -126,9 +126,10 @@ class PolymarketPriceService {
    * Get current prices for a list of items with clob_id and outcome.id
    * @private
    * @param {Array} items - Array of items with clob_id and outcome.id
+   * @param {string} side - 'buy' or 'sell' price side
    * @returns {Promise<Map>} Map of outcome.id -> current price
    */
-  async _getPricesForItems(items) {
+  async _getPricesForItems(items, side = 'buy') {
     const tokenParams = [];
     console.log('getting prices in getPricesforItems')
     for (const item of items) {
@@ -169,7 +170,7 @@ class PolymarketPriceService {
       if (tokenId && outcomeId) {
         tokenParams.push({
           tokenId,
-          side: 'buy', // Get buy price for current market price
+          side: side,
           outcomeId: outcomeId
         });
       }
@@ -192,21 +193,21 @@ class PolymarketPriceService {
   }
 
   /**
-   * Get current prices for opportunities
+   * Get current prices for opportunities (asking prices - what you'd pay to buy)
    * @param {Array} opportunities - Array of opportunity objects
-   * @returns {Promise<Map>} Map of outcome.id -> current price
+   * @returns {Promise<Map>} Map of outcome.id -> current asking price
    */
   async getOpportunityPrices(opportunities) {
-    return this._getPricesForItems(opportunities);
+    return this._getPricesForItems(opportunities, 'sell');
   }
 
   /**
-   * Get current prices for positions
+   * Get current prices for positions (bid prices - what you could sell for)
    * @param {Array} positions - Array of position objects
-   * @returns {Promise<Map>} Map of outcome.id -> current price
+   * @returns {Promise<Map>} Map of outcome.id -> current bid price
    */
   async getPositionPrices(positions) {
-    return this._getPricesForItems(positions);
+    return this._getPricesForItems(positions, 'buy');
   }
 
   /**

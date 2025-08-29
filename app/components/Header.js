@@ -4,6 +4,7 @@ import Link from 'next/link';
 // import { useSession, signIn, signOut } from 'next-auth/react';
 import WalletBalance from './WalletBalance';
 import CryptoTicker from './CryptoTicker';
+import { WalletConnect } from './WalletAuth';
 
 export default function Header() {
   // const { data: session, status } = useSession();
@@ -50,8 +51,8 @@ export default function Header() {
             </nav>
           </div>
           <div className="hidden sm:ml-6 sm:flex sm:items-center">
-           
               <div className="flex items-center space-x-4">
+                <WalletConnect />
                 <WalletBalance />
               </div>
           </div>

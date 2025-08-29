@@ -8,7 +8,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { searchNews } from '../../../lib/services/newsService';
 import { useEffect, useState } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
 
 interface NewsListProps {
   query: string;
@@ -87,21 +86,21 @@ export default function NewsList({ query, tag, market, sort, currentPage }: News
     return (
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <Skeleton className="h-10 w-full sm:w-96" />
+          <div className="h-10 w-full sm:w-96 bg-gray-200 animate-pulse rounded" />
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Skeleton className="h-4 w-16" />
-            <Skeleton className="h-10 w-40" />
+            <div className="h-4 w-16 bg-gray-200 animate-pulse rounded" />
+            <div className="h-10 w-40 bg-gray-200 animate-pulse rounded" />
           </div>
         </div>
         {[1, 2, 3].map((i) => (
           <div key={i} className="border-b border-gray-200 pb-6">
             <div className="flex flex-col md:flex-row gap-4">
-              <Skeleton className="w-full md:w-48 h-32 rounded-lg" />
+              <div className="w-full md:w-48 h-32 bg-gray-200 animate-pulse rounded-lg" />
               <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-6 w-3/4" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-2/3" />
+                <div className="h-4 w-32 bg-gray-200 animate-pulse rounded" />
+                <div className="h-6 w-3/4 bg-gray-200 animate-pulse rounded" />
+                <div className="h-4 w-full bg-gray-200 animate-pulse rounded" />
+                <div className="h-4 w-2/3 bg-gray-200 animate-pulse rounded" />
               </div>
             </div>
           </div>

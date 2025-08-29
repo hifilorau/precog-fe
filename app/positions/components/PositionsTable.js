@@ -141,9 +141,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
       toast.success('Sell order placed successfully');
       
       // Refresh positions to show updated status
-      if (onPositionsUpdated) {
-        onPositionsUpdated();
-      }
+      updateState();
     } catch (error) {
       console.error('Sell failed:', error);
       toast.error(error.message || 'Failed to sell position');

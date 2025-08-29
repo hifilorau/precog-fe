@@ -209,7 +209,7 @@ const OpportunityTable = ({
                               
                               {/* Price Type Label */}
                               <div className="text-xs text-gray-500">
-                                {hasCurrentPrice ? 'Live' : 'Captured'} {opportunity.outcome ? 'outcome' : 'market'} price
+                                {hasCurrentPrice ? 'Live asking' : 'Captured'} {opportunity.outcome ? 'outcome' : 'market'} price
                               </div>
                             </div>
                           );
