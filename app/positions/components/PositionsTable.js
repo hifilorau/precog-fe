@@ -21,18 +21,19 @@ import {
 import { useRealTimePrices } from '@/hooks/useRealTimePrices'
 import { usePeriodicBalance } from '@/hooks/usePeriodicBalance'
 import { useStateContext } from '@/app/store'
+import PositionsTableSkeleton from './PositionsTableSkeleton'
 
 export default function PositionsTable({ refreshTrigger = 0 }) {
   const [sellingPosition, setSellingPosition] = useState(null)
   const [cancelingPosition, setCancelingPosition] = useState(null)
   const [redeemingPosition, setRedeemingPosition] = useState(null)
   const [error, setError] = useState('')
-  const [mergedPositions, setMergedPositions] = useState([])
+  const [isLoadingPositions, setIsLoadingPositions] = useState(false)
   const [editingPosition, setEditingPosition] = useState(null)
   const [showEditModal, setShowEditModal] = useState(false)
   const [buyMorePosition, setBuyMorePosition] = useState(null)
   const [showBuyMoreModal, setShowBuyMoreModal] = useState(false)
-  const { updateState } = useStateContext()
+  const { mergedPositions, updateState } = useStateContext()
   
   // Real-time price context
   const {
@@ -72,31 +73,39 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
   console.log('Current Prices from Hook:', currentPrices)
   console.log('Prices Loading:', pricesLoading)
 
-  // Fetch merged positions data from the server
+  // Load from store immediately, then refresh in background
   useEffect(() => {
     let isMounted = true
     setError('')
+    
+    // If we have data in store, use it immediately (no loading state)
+    const hasPositionsInStore = Array.isArray(mergedPositions) && mergedPositions.length > 0
+    if (!hasPositionsInStore) {
+      setIsLoadingPositions(true)
+    }
 
     const fetchPositionsData = async () => {
       try {
-        // Fetch merged positions from backend
+        // Fetch fresh merged positions from backend
         const mergedData = await fetchMergedPositions()
-        console.log('Fetched Merged Positions Data:', mergedData)
+        console.log('Fetched Fresh Merged Positions Data:', mergedData)
         if (!isMounted) return
 
         const positions = Array.isArray(mergedData) ? mergedData : []
-        setMergedPositions(positions)
-        // Update global state with merged positions
+        // Update global state with fresh positions
         updateState({ mergedPositions: positions })
       } catch (err) {
         console.error('Error fetching positions:', err)
-        if (isMounted) setError('Failed to load positions')
+        if (isMounted) setError('Failed to refresh positions')
+      } finally {
+        if (isMounted) setIsLoadingPositions(false)
       }
     }
 
+    // Fetch fresh data in background
     fetchPositionsData()
     return () => { isMounted = false }
-  }, [refreshTrigger, setMergedPositions, updateState])
+  }, [refreshTrigger, updateState]) // Removed mergedPositions from dependencies
 
   // Update global state with current prices when they change
   useEffect(() => {
@@ -196,7 +205,6 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
       try {
         const mergedData = await fetchMergedPositions()
         const positions = Array.isArray(mergedData) ? mergedData : []
-        setMergedPositions(positions)
         updateState({ mergedPositions: positions })
       } catch (err) {
         console.error('Error fetching positions after edit:', err)
@@ -221,13 +229,17 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
       try {
         const mergedData = await fetchMergedPositions()
         const positions = Array.isArray(mergedData) ? mergedData : []
-        setMergedPositions(positions)
         updateState({ mergedPositions: positions })
       } catch (err) {
         console.error('Error fetching positions after buy:', err)
       }
     }
     fetchPositionsData()
+  }
+
+  // Show skeleton while loading initial positions data
+  if (isLoadingPositions) {
+    return <PositionsTableSkeleton rowCount={3} />
   }
 
   return (

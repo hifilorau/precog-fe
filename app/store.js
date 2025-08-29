@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { calculatePnL, getCurrentPrice } from './utils/formatters';
 
 // Create context
 const StateContext = createContext(undefined);
@@ -10,6 +11,7 @@ const initialState = {
   balance: null,
   mergedPositions: [],
   currentPrices: new Map(),
+  portfolioValue: null,
   updateState: () => {},
   resetState: () => {},
 };
@@ -25,6 +27,39 @@ export const StateProvider = ({ children }) => {
     return initialState;
   });
 
+  // Calculate portfolio value based on current state
+  const calculatePortfolioValue = useCallback((currentState) => {
+    const { balance, mergedPositions, currentPrices } = currentState;
+    
+    if (!Array.isArray(mergedPositions) || mergedPositions.length === 0) {
+      return balance || 0;
+    }
+
+    // Ensure currentPrices is always a Map
+    const pricesMap = currentPrices instanceof Map ? currentPrices : new Map();
+
+    // Filter for actual open positions (not resolved/lost)
+    const openPositions = mergedPositions.filter(position => {
+      const currentPrice = pricesMap.get(position.outcome_id) || getCurrentPrice(position);
+      const currentValue = position.size && currentPrice ? position.size * currentPrice : Number(position?.currentValue ?? position?.current_value ?? 0);
+      const isResolved = position?.resolved_status === 'lost' || position?.market?.status === 'closed';
+      const hasZeroValue = currentValue === 0 || (currentPrice !== undefined && Number(currentPrice) === 0);
+      
+      // Position is open if it's not resolved and has value
+      return !isResolved && !hasZeroValue && position.status === 'filled';
+    });
+
+    // Calculate total value of open positions
+    const totalOpenPositionsValue = openPositions.reduce((total, position) => {
+      const currentPrice = pricesMap.get(position.outcome_id) || getCurrentPrice(position);
+      const currentValue = position.size && currentPrice ? position.size * currentPrice : Number(position?.currentValue ?? position?.current_value ?? 0);
+      return total + currentValue;
+    }, 0);
+
+    // Total portfolio value = USDC balance + open positions value
+    return (balance || 0) + totalOpenPositionsValue;
+  }, []);
+
   // Persist state to localStorage whenever it changes
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -34,11 +69,24 @@ export const StateProvider = ({ children }) => {
 
   // Update state function
   const updateState = useCallback((newState) => {
-    setState(prev => ({
-      ...prev,
-      ...(typeof newState === 'function' ? newState(prev) : newState)
-    }));
-  }, []);
+    setState(prev => {
+      const updatedState = {
+        ...prev,
+        ...(typeof newState === 'function' ? newState(prev) : newState)
+      };
+      
+      // Recalculate portfolio value when relevant data changes
+      const hasRelevantChanges = newState.balance !== undefined || 
+                                newState.mergedPositions !== undefined || 
+                                newState.currentPrices !== undefined;
+      
+      if (hasRelevantChanges) {
+        updatedState.portfolioValue = calculatePortfolioValue(updatedState);
+      }
+      
+      return updatedState;
+    });
+  }, [calculatePortfolioValue]);
 
   // Reset state to initial state
   const resetState = useCallback(() => {

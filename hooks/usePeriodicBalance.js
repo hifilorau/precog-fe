@@ -13,8 +13,9 @@ export function usePeriodicBalance(intervalMs = 30000, enabled = true) {
 
   const fetchBalance = useCallback(async () => {
     try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/wallet/balance/usdc`,
+        `${apiUrl}/wallet/balance/usdc`,
         {
           headers: {
             'Content-Type': 'application/json',

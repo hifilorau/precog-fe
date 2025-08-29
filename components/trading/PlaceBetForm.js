@@ -10,7 +10,7 @@ import { useStateContext } from '@/app/store'
 import { toast } from 'sonner'
 
 // Helper function to calculate number of shares based on balance and price
-const calculateShares = (balance, price, percentage = 0.1) => {
+const calculateShares = (balance, price, percentage = 0.08) => {
   if (!balance || !price || price <= 0) return 0;
   const amountToSpend = balance * percentage;
   return Math.floor(amountToSpend / price);
@@ -24,12 +24,13 @@ export default function PlaceBetForm({
   showCard = true,
   className = ""
 }) {
-  // Get wallet balance from global state
-  const { balance: globalBalance, updateState } = useStateContext();
+  // Get wallet balance and portfolio value from global state
+  const { balance: globalBalance, portfolioValue, updateState } = useStateContext();
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   
-  // Memoize balance to prevent unnecessary re-renders
+  // Memoize balance and portfolio value to prevent unnecessary re-renders
   const balance = useMemo(() => globalBalance, [globalBalance]);
+  const totalPortfolioValue = useMemo(() => portfolioValue || globalBalance || 0, [portfolioValue, globalBalance]);
   
   // Stable refs for input elements
   const maxBidPriceRef = useRef(null);
@@ -143,14 +144,14 @@ export default function PlaceBetForm({
       if (name === 'max_bid_price' && value && !isNaN(parseFloat(value))) {
         const price = parseFloat(value) / 100; // Convert percentage to decimal
         if (price > 0 && price <= 1) { // Valid price range
-          const shares = calculateShares(balance || 0, price);
+          const shares = calculateShares(totalPortfolioValue || 0, price);
           newData.volume = shares.toString();
         }
       }
       
       return newData;
     });
-  }, [balance, updateFormData]);
+  }, [totalPortfolioValue, updateFormData]);
   
   // Stable refresh balance handler
   const handleRefreshBalance = useCallback(async (e) => {
@@ -160,12 +161,14 @@ export default function PlaceBetForm({
       // Get current form data without depending on it in useCallback
       const currentPrice = parseFloat(document.getElementById('max_bid_price')?.value || '0');
       if (currentPrice > 0) {
-        const shares = calculateShares(newBalance, currentPrice / 100); // Convert percentage to decimal
+        // Use the updated portfolio value (balance will be updated via updateState)
+        const updatedPortfolioValue = portfolioValue || newBalance;
+        const shares = calculateShares(updatedPortfolioValue, currentPrice / 100); // Convert percentage to decimal
         updateFormData(prev => ({ ...prev, volume: shares.toString() }));
       }
       toast.success('Balance refreshed');
     }
-  }, [fetchWalletBalance, updateFormData]);
+  }, [fetchWalletBalance, updateFormData, portfolioValue]);
 
   // Auto-fill price fields based on order book data and historical data
   const autoFillPrices = () => {
@@ -237,6 +240,34 @@ export default function PlaceBetForm({
       inputRefs[field].current.focus()
     }
   }
+
+  // Calculate potential loss at stop loss price
+  const calculateStopLossAmount = (stopLossPrice, shares, entryPrice) => {
+    if (!stopLossPrice || !shares || !entryPrice) return null;
+    const stopDecimal = parseFloat(stopLossPrice) / 100;
+    const entryDecimal = parseFloat(entryPrice) / 100;
+    const numShares = parseInt(shares);
+    
+    if (stopDecimal >= entryDecimal) return null; // Stop loss should be below entry
+    
+    const lossPerShare = entryDecimal - stopDecimal;
+    const totalLoss = lossPerShare * numShares;
+    return totalLoss;
+  };
+
+  // Calculate potential gain at sell target price  
+  const calculateSellTargetAmount = (sellPrice, shares, entryPrice) => {
+    if (!sellPrice || !shares || !entryPrice) return null;
+    const sellDecimal = parseFloat(sellPrice) / 100;
+    const entryDecimal = parseFloat(entryPrice) / 100;
+    const numShares = parseInt(shares);
+    
+    if (sellDecimal <= entryDecimal) return null; // Sell target should be above entry
+    
+    const gainPerShare = sellDecimal - entryDecimal;
+    const totalGain = gainPerShare * numShares;
+    return totalGain;
+  };
 
   const validateForm = () => {
     const { max_bid_price, sell_price, stop_loss_price } = formData
@@ -549,7 +580,7 @@ export default function PlaceBetForm({
       const needsUpdate = prev.max_bid_price !== percentagePrice;
       if (!needsUpdate) return prev;
       
-      const shares = balance > 0 ? calculateShares(balance, decimalPrice) : 0;
+      const shares = totalPortfolioValue > 0 ? calculateShares(totalPortfolioValue, decimalPrice) : 0;
       
       return {
         ...prev,
@@ -559,7 +590,7 @@ export default function PlaceBetForm({
     });
     
     // Only depend on outcome ID and specific price fields
-  }, [outcome?.id, outcome?.current_price, outcome?.probability, balance]);
+  }, [outcome?.id, outcome?.current_price, outcome?.probability, totalPortfolioValue]);
 
   return (
     <div className={className}>
@@ -741,7 +772,7 @@ export default function PlaceBetForm({
               <div className="flex items-center justify-between">
                 <Label htmlFor="volume">Number of Shares</Label>
                 <span className="text-xs text-muted-foreground">
-                  ~{(parseFloat(formData.max_bid_price || 0) * (parseInt(formData.volume) || 0)).toFixed(2)} USDC
+                  ~{((parseFloat(formData.max_bid_price || 0) / 100) * (parseInt(formData.volume) || 0)).toFixed(2)} USDC
                 </span>
               </div>
               <Input
@@ -755,7 +786,7 @@ export default function PlaceBetForm({
                 placeholder="10"
               />
               <p className="text-xs text-muted-foreground">
-                Based on 10% of available balance
+                Based on 8% of total portfolio value
               </p>
             </div>
           </div>
@@ -763,10 +794,20 @@ export default function PlaceBetForm({
 
         {/* Sell Price - Optional */}
         <div className="space-y-2">
-          <Label htmlFor="sell_price" className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-green-600" />
-            Sell Target Price (¢)
-          </Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="sell_price" className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-green-600" />
+              Sell Target Price (¢)
+            </Label>
+            {(() => {
+              const potentialGain = calculateSellTargetAmount(formData.sell_price, formData.volume, formData.max_bid_price);
+              return potentialGain ? (
+                <span className="text-xs text-green-600 font-medium">
+                  +${potentialGain.toFixed(2)} gain
+                </span>
+              ) : null;
+            })()}
+          </div>
           <div className="relative">
             <Input
               id="sell_price"
@@ -802,10 +843,20 @@ export default function PlaceBetForm({
 
         {/* Stop Loss Price - Optional */}
         <div className="space-y-2">
-          <Label htmlFor="stop_loss_price" className="flex items-center gap-2">
-            <Shield className="h-4 w-4 text-red-600" />
-            Stop Loss Price (¢)
-          </Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="stop_loss_price" className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-red-600" />
+              Stop Loss Price (¢)
+            </Label>
+            {(() => {
+              const potentialLoss = calculateStopLossAmount(formData.stop_loss_price, formData.volume, formData.max_bid_price);
+              return potentialLoss ? (
+                <span className="text-xs text-red-600 font-medium">
+                  -${potentialLoss.toFixed(2)} loss
+                </span>
+              ) : null;
+            })()}
+          </div>
           <div className="relative">
             <Input
               id="stop_loss_price"

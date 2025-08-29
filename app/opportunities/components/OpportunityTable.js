@@ -19,7 +19,7 @@ const OpportunityTable = ({
   const [showQuickBet, setShowQuickBet] = useState(false);
   
   // Fetch real-time prices for all opportunities
-  const { currentPrices, loading: pricesLoading, error: pricesError, refreshPrices } = useRealTimePrices(opportunities);
+  const { currentPrices, loading: pricesLoading, error: pricesError, refreshPrices } = useRealTimePrices(opportunities, 'opportunities', 'opportunity');
 
   const handleQuickBet = (market, outcome) => {
     setQuickBetMarket(market);
