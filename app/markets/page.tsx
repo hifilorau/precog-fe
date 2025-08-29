@@ -1,14 +1,15 @@
-'use client';
+'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Market, Outcome } from '@/lib/types/markets';
 import { marketApi } from '@/lib/services/api';
-import MarketVolatility from '../components/MarketVolatility';
-import MarketFilters from '../components/MarketFilters';
+import MarketVolatility from '@/app/components/MarketVolatility';
+import MarketFilters from '@/app/components/MarketFilters';
 
 export default function MarketsPage() {
+  console.log('heyo')
   // Volatility breakout filter state
   const [breakout1h, setBreakout1h] = useState<boolean | null>(null);
   const [breakout6h, setBreakout6h] = useState<boolean | null>(null);
@@ -318,43 +319,43 @@ export default function MarketsPage() {
     { value: 'resolved', label: 'Resolved' },
   ];
 
-  // Sort options
-  const sortOptions = [
-    { value: 'updated_at', label: 'Recently Updated' },
-    { value: 'closes_at', label: 'Closing Soon' },
-    { value: 'created_at', label: 'Newly Created' },
-    { value: 'volume', label: 'Highest Volume' },
-  ];
+  // // Sort options
+  // const sortOptions = [
+  //   { value: 'updated_at', label: 'Recently Updated' },
+  //   { value: 'closes_at', label: 'Closing Soon' },
+  //   { value: 'created_at', label: 'Newly Created' },
+  //   { value: 'volume', label: 'Highest Volume' },
+  // ];
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
-  };
+  // const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   setSearchQuery(e.target.value);
+  // };
 
-  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedCategory(e.target.value);
-  };
+  // const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  //   setSelectedCategory(e.target.value);
+  // };
 
-  const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedStatus(e.target.value);
-  };
+  // const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  //   setSelectedStatus(e.target.value);
+  // };
 
-  const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedProvider(e.target.value);
-  };
+  // const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  //   setSelectedProvider(e.target.value);
+  // };
 
-  const handleSortByChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSortBy(e.target.value);
-  };
+  // const handleSortByChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  //   setSortBy(e.target.value);
+  // };
 
-  const handleSortOrderChange = () => {
-    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-  };
+  // const handleSortOrderChange = () => {
+  //   setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+  // };
 
-  const handleExcludeResolvedChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const checked = event.target.checked;
-    console.log('Exclude resolved changed to:', checked);
-    setExcludeResolved(checked);
-  };
+  // const handleExcludeResolvedChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  //   const checked = event.target.checked;
+  //   console.log('Exclude resolved changed to:', checked);
+  //   setExcludeResolved(checked);
+  // };
 
   const handleClearFilters = () => {
     setSearchQuery('');
