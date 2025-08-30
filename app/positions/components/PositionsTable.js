@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock, Edit, Plus, Minus, Info, Copy } from 'lucide-react'
+import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock, Edit, Plus, Minus, Info } from 'lucide-react'
 import EditPositionModal from './EditPositionModal'
 import QuickBetModal from './QuickBetModal'
 
