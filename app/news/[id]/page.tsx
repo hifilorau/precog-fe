@@ -24,9 +24,10 @@ async function getArticle(id: string): Promise<NewsArticle | null> {
 export async function generateMetadata({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const article = await getArticle(params.id);
+  const { id } = await params;
+  const article = await getArticle(id);
   
   if (!article) {
     return {
@@ -42,7 +43,7 @@ export async function generateMetadata({
       description: article.summary || article.title,
       type: 'article',
       publishedTime: article.published_at,
-      url: `https://yourdomain.com/news/${params.id}`,
+      url: `https://yourdomain.com/news/${id}`,
       images: article.image_url ? [{ url: article.image_url }] : [],
     },
     twitter: {
@@ -57,9 +58,10 @@ export async function generateMetadata({
 export default async function NewsArticlePage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const article = await getArticle(params.id);
+  const { id } = await params;
+  const article = await getArticle(id);
   
   if (!article) {
     notFound();
