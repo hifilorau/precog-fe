@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock, Edit, Plus } from 'lucide-react'
+import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock, Edit, Plus, Minus, Info, Copy } from 'lucide-react'
 import EditPositionModal from './EditPositionModal'
 import QuickBetModal from './QuickBetModal'
 
@@ -235,6 +235,16 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
     fetchPositionsData()
   }
 
+  const handleCopyPositionId = async (positionId) => {
+    try {
+      await navigator.clipboard.writeText(positionId)
+      toast.success('Position ID copied to clipboard')
+    } catch (error) {
+      console.error('Failed to copy position ID:', error)
+      toast.error('Failed to copy position ID')
+    }
+  }
+
   // Show skeleton while loading initial positions data
   if (isLoadingPositions) {
     return <PositionsTableSkeleton rowCount={3} />
@@ -304,23 +314,36 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
                     {/* Market & Outcome */}
                     <div className="lg:col-span-3">
-                      <div className="font-medium text-sm truncate mb-1" title={position.market?.question}>
-                        {position.market?.question || 'Unknown Market'}
-                      </div>
-                      <div className="text-sm text-muted-foreground mb-1">
-                        {outcomeLabel}
-                      </div>
-                      {position.market?.status === 'closed' && (
-                        <div className="text-xs">
-                          {position.resolved_status ? (
-                            <span className={position.resolved_status === 'won' ? 'text-green-600' : 'text-red-600'}>
-                              ✓ Resolved
-                            </span>
-                          ) : (
-                            <span className="text-orange-600">⏰ Closed</span>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm truncate mb-1" title={position.market?.question}>
+                            {position.market?.question || 'Unknown Market'}
+                          </div>
+                          <div className="text-sm text-muted-foreground mb-1">
+                            {outcomeLabel}
+                          </div>
+                          {position.market?.status === 'closed' && (
+                            <div className="text-xs">
+                              {position.resolved_status ? (
+                                <span className={position.resolved_status === 'won' ? 'text-green-600' : 'text-red-600'}>
+                                  ✓ Resolved
+                                </span>
+                              ) : (
+                                <span className="text-orange-600">⏰ Closed</span>
+                              )}
+                            </div>
                           )}
                         </div>
-                      )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleCopyPositionId(position.id)}
+                          className="p-1 h-6 w-6 ml-2"
+                          title={`Copy Position ID: ${position.id}`}
+                        >
+                          <Info className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
 
                     {/* Status & Close Date */}
@@ -422,9 +445,9 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
 
                     {/* Actions */}
                     <div className="lg:col-span-1">
-                      <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-1">
                         {(() => {
-                          // If current value is zero, show Lost (replace Claim Winnings)
+                          // If current value is zero, show Lost status
                           const isLostValue = derivedCurrentValue != null && Number(derivedCurrentValue) === 0
                           if (isLostValue) {
                             // Check if market is still open for trading
@@ -432,28 +455,22 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                             
                             if (isMarketOpen) {
                               return (
-                                <div className="flex flex-col gap-1">
-                                  <Button variant="destructive" size="sm" disabled>
-                                    Lost
-                                  </Button>
+                                <>
+                                  <div className="text-xs text-red-600 mr-2">Lost</div>
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={() => handleBuyMore(position)}
-                                    className="text-xs"
+                                    className="p-1 h-6 w-6"
+                                    title="Buy More"
                                   >
-                                    <Plus className="h-3 w-3 mr-1" />
-                                    Buy More
+                                    <Plus className="h-3 w-3" />
                                   </Button>
-                                </div>
+                                </>
                               );
                             }
                             
-                            return (
-                              <Button variant="destructive" size="sm" disabled>
-                                Lost
-                              </Button>
-                            );
+                            return <div className="text-xs text-red-600">Lost</div>;
                           }
 
                           // Redeemable positions with non-zero current value -> Claim Winnings
@@ -465,13 +482,11 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                                 size="sm"
                                 onClick={() => handleRedeemPosition(position)}
                                 disabled={redeemingPosition === position.id}
-                                className="bg-green-600 hover:bg-green-700 text-white"
+                                className="bg-green-600 hover:bg-green-700 text-white text-xs"
+                                title="Claim Winnings"
                               >
                                 {redeemingPosition === position.id ? (
-                                  <>
-                                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                    Redeeming...
-                                  </>
+                                  <Loader2 className="h-3 w-3 animate-spin" />
                                 ) : (
                                   <>
                                     <DollarSign className="h-3 w-3 mr-1" />
@@ -482,7 +497,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                             );
                           }
 
-                          // Open/filled positions (not resolved) and not data-only -> allow Sell
+                          // Open/filled positions (not resolved) and not data-only -> allow Sell/Edit/Buy
                           const isFilled = position.status === 'filled'
                             && (!position.resolved_status || position.resolved_status === '')
                             && !position.isDataApi
@@ -490,59 +505,57 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                             const riskLevel = getStopLossRiskLevel(position, currentPrice);
                             const isHighRisk = riskLevel && (riskLevel.level === 'crash' || riskLevel.level === 'high');
                             return (
-                              <>
+                              <div className="flex items-center gap-1">
                                 <Button
-                                  variant={isHighRisk ? "destructive" : "outline"}
+                                  variant="outline"
                                   size="sm"
-                                  onClick={() => handleSellPosition(position)}
+                                  onClick={() => handleBuyMore(position)}
                                   disabled={sellingPosition === position.id}
-                                  className={isHighRisk ? "animate-pulse" : ""}
+                                  className="p-1 h-6 w-6"
+                                  title="Buy More"
                                 >
-                                  {sellingPosition === position.id ? (
-                                    <>
-                                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                      Selling...
-                                    </>
-                                  ) : (
-                                    <>
-                                      {isHighRisk && <Shield className="h-3 w-3 mr-1" />}
-                                      {isHighRisk ? 'SELL!' : 'Sell'}
-                                    </>
-                                  )}
+                                  <Plus className="h-3 w-3" />
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleEditPosition(position)}
                                   disabled={sellingPosition === position.id}
-                                  className="mt-1"
+                                  className="p-1 h-6 w-6"
+                                  title="Edit Position"
                                 >
-                                  <Edit className="h-3 w-3 mr-1" />
-                                  Edit
+                                  <Edit className="h-3 w-3" />
                                 </Button>
                                 <Button
-                                  variant="outline"
+                                  variant={isHighRisk ? "destructive" : "outline"}
                                   size="sm"
-                                  onClick={() => handleBuyMore(position)}
+                                  onClick={() => handleSellPosition(position)}
                                   disabled={sellingPosition === position.id}
-                                  className="mt-1"
+                                  className={`p-1 h-6 w-6 ${isHighRisk ? "animate-pulse" : ""}`}
+                                  title={isHighRisk ? "SELL NOW!" : "Sell Position"}
                                 >
-                                  <Plus className="h-3 w-3 mr-1" />
-                                  Buy More
+                                  {sellingPosition === position.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <>
+                                      {isHighRisk && <Shield className="h-3 w-3" />}
+                                      {!isHighRisk && <Minus className="h-3 w-3" />}
+                                    </>
+                                  )}
                                 </Button>
                                 {riskLevel && riskLevel.level === 'crash' && (
-                                  <div className="flex items-center gap-1 text-xs text-red-600 font-medium">
-                                    🚨 CRASH!
+                                  <div className="text-xs text-red-600 font-medium ml-1">
+                                    🚨
                                   </div>
                                 )}
-                              </>
+                              </div>
                             );
                           }
 
                           // Pending: show Pending label and a Cancel button for open positions
                           if (position.status === 'open' || position.status === 'not_filled') {
                             return (
-                              <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-1">
                                 <div className="flex items-center gap-1 text-xs text-gray-500">
                                   <Clock className="h-3 w-3" />
                                   Pending
@@ -553,14 +566,13 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                                     size="sm"
                                     onClick={() => handleCancelOrder(position.id)}
                                     disabled={cancelingPosition === position.id}
+                                    className="p-1 h-6 w-6 ml-1"
+                                    title="Cancel Order"
                                   >
                                     {cancelingPosition === position.id ? (
-                                      <>
-                                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                        Cancel...
-                                      </>
+                                      <Loader2 className="h-3 w-3 animate-spin" />
                                     ) : (
-                                      'Cancel'
+                                      <Minus className="h-3 w-3" />
                                     )}
                                   </Button>
                                 )}
@@ -587,25 +599,23 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                             
                             if (isMarketOpen) {
                               return (
-                                <div className="flex flex-col gap-1">
-                                  <div className="flex items-center gap-1 text-xs text-red-600">
-                                    Lost
-                                  </div>
+                                <div className="flex items-center gap-1">
+                                  <div className="text-xs text-red-600">Lost</div>
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={() => handleBuyMore(position)}
-                                    className="text-xs"
+                                    className="p-1 h-6 w-6 ml-1"
+                                    title="Buy More"
                                   >
-                                    <Plus className="h-3 w-3 mr-1" />
-                                    Buy More
+                                    <Plus className="h-3 w-3" />
                                   </Button>
                                 </div>
                               );
                             }
                             
                             return (
-                              <div className="flex items-center gap-1 text-xs text-red-600">
+                              <div className="text-xs text-red-600">
                                 Lost
                               </div>
                             );
