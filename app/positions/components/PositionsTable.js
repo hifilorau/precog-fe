@@ -61,7 +61,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
 
   // Fetch merged positions from backend
   const fetchMergedPositions = async () => {
-    const response = await fetch('http://localhost:8000/api/v1/positions/merged')
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/positions/merged`)
     if (!response.ok) {
       throw new Error('Failed to fetch merged positions')
     }

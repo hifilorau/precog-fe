@@ -10,7 +10,7 @@ export default function useRealTimeCoinPrices() {
 
   const fetchPrices = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/coins/prices');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/coins/prices`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

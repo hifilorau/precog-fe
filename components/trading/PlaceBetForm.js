@@ -329,7 +329,7 @@ export default function PlaceBetForm({
 
       console.log('Sending position data to backend:', positionData);
 
-      const response = await fetch('http://localhost:8000/api/v1/positions/', {
+      const response = await fetch(`${NEXT_PUBLIC_API_URL}/positions/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -535,7 +535,7 @@ export default function PlaceBetForm({
         yesterday.setDate(yesterday.getDate() - 1)
         
         const startTimeParam = yesterday.toISOString()
-        const url = `http://localhost:8000/api/v1/markets/${market.id}/price-history?interval=hour&start_time=${startTimeParam}`
+        const url = `${process.env.NEXT_PUBLIC_API_URL}markets/${market.id}/price-history?interval=hour&start_time=${startTimeParam}`
         
         const response = await fetch(url)
         if (!response.ok) {

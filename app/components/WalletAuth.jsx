@@ -74,7 +74,7 @@ export function AuthProvider({ children }) {
           const userAddress = accounts[0];
           setAddress(userAddress);
           setIsConnected(true);
-          setIsAuthorized(userAddress.toLowerCase() === AUTHORIZED_ADDRESS.toLowerCase());
+          setIsAuthorized(AUTHORIZED_ADDRESS && userAddress.toLowerCase() === AUTHORIZED_ADDRESS.toLowerCase());
         }
       } catch (error) {
         console.error('Error checking connection:', error);
@@ -107,7 +107,7 @@ export function AuthProvider({ children }) {
         setAddress(userAddress);
         setIsConnected(true);
         
-        const authorized = userAddress.toLowerCase() === AUTHORIZED_ADDRESS.toLowerCase();
+        const authorized = AUTHORIZED_ADDRESS && userAddress.toLowerCase() === AUTHORIZED_ADDRESS.toLowerCase();
         setIsAuthorized(authorized);
         
         if (!authorized) {
@@ -145,7 +145,7 @@ export function AuthProvider({ children }) {
         } else {
           const userAddress = accounts[0];
           setAddress(userAddress);
-          setIsAuthorized(userAddress.toLowerCase() === AUTHORIZED_ADDRESS.toLowerCase());
+          setIsAuthorized(AUTHORIZED_ADDRESS && userAddress.toLowerCase() === AUTHORIZED_ADDRESS.toLowerCase());
         }
       };
 

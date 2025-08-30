@@ -73,7 +73,7 @@ const OpportunitiesPage = () => {
       
       const params = buildQueryParams(filters, 0);
 
-      const response = await fetch(`http://localhost:8000/api/v1/opportunities/?${params}`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/opportunities/?${params}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -103,7 +103,7 @@ const OpportunitiesPage = () => {
       const nextPage = page + 1;
       const params = buildQueryParams(filters, nextPage);
 
-      const response = await fetch(`http://localhost:8000/api/v1/opportunities/?${params}`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/opportunities/?${params}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

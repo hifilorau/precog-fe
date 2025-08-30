@@ -51,7 +51,7 @@ const OpportunityDetailPage = () => {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 30);
       
-      const url = `http://localhost:8000/api/v1/markets/${marketId}/price-history?` +
+      const url = `${process.env.NEXT_PUBLIC_API_URL}/markets/${marketId}/price-history?` +
         `start_time=${encodeURIComponent(startDate.toISOString())}` +
         `&end_time=${encodeURIComponent(endDate.toISOString())}`;
       
@@ -97,7 +97,7 @@ const OpportunityDetailPage = () => {
     try {
       setLoading(true);
       console.log(`Fetching opportunity ${opportunityId}...`);
-      const response = await fetch(`http://localhost:8000/api/v1/opportunities/${opportunityId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/opportunities/${opportunityId}`, {
         headers: {
           'Content-Type': 'application/json',
         },
