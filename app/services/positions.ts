@@ -4,7 +4,7 @@ type Position = {
   id: string | number;
   status: 'won' | 'filled' | 'open' | string;
   updated_at?: string;
-  [k: string]: any;
+  [k: string]: unknown;
 };
 
 async function fetchByStatus(status: string, signal?: AbortSignal): Promise<Position[]> {

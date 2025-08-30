@@ -105,7 +105,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
     // Fetch fresh data in background
     fetchPositionsData()
     return () => { isMounted = false }
-  }, [refreshTrigger, updateState]) // Removed mergedPositions from dependencies
+  }, [refreshTrigger, updateState]) // mergedPositions intentionally excluded to prevent infinite loop
 
   // Update global state with current prices when they change
   useEffect(() => {

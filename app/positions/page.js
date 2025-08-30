@@ -15,8 +15,8 @@ import { useStateContext } from '@/app/store'
 function PositionsPageContent() {
   const [showPlaceBetForm, setShowPlaceBetForm] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
-  const [selectedMarket, setSelectedMarket] = useState(null)
-  const [selectedOutcome, setSelectedOutcome] = useState(null)
+  const [selectedMarket] = useState(null)
+  const [selectedOutcome] = useState(null)
   const [selectedPositionId, setSelectedPositionId] = useState(null)
   const [showPositionDetails, setShowPositionDetails] = useState(false)
   const { mergedPositions } = useStateContext()

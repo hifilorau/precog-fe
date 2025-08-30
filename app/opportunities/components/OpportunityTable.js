@@ -12,14 +12,14 @@ const OpportunityTable = ({
   sortOrder, 
   onSort 
 }) => {
-  const [trackingStates, setTrackingStates] = useState({});
-  const [trackingLoading, setTrackingLoading] = useState({});
+  const [trackingStates] = useState({});
+  const [trackingLoading] = useState({});
   const [quickBetMarket, setQuickBetMarket] = useState(null);
   const [quickBetOutcome, setQuickBetOutcome] = useState(null);
   const [showQuickBet, setShowQuickBet] = useState(false);
   
   // Fetch real-time prices for all opportunities
-  const { currentPrices, loading: pricesLoading, error: pricesError, refreshPrices } = useRealTimePrices(opportunities, 'opportunities', 'opportunity');
+  const { currentPrices, loading: pricesLoading, refreshPrices } = useRealTimePrices(opportunities, 'opportunities', 'opportunity');
 
   const handleQuickBet = (market, outcome) => {
     setQuickBetMarket(market);

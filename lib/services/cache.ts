@@ -4,7 +4,7 @@
 export interface CacheEntry<T> {
   data: T;
   expiresAt: number; // unix ms
-  meta?: Record<string, any>;
+  meta?: Record<string, unknown>;
 }
 
 const CACHE_PREFIX = 'predictions_cache_v1';
@@ -13,7 +13,7 @@ function getCacheKey(type: 'priceHistory' | 'news', marketId: string) {
   return `${CACHE_PREFIX}:${type}:${marketId}`;
 }
 
-export function setCache<T>(type: 'priceHistory' | 'news', marketId: string, data: T, ttlMs: number, meta?: Record<string, any>) {
+export function setCache<T>(type: 'priceHistory' | 'news', marketId: string, data: T, ttlMs: number, meta?: Record<string, unknown>) {
   const expiresAt = Date.now() + ttlMs;
   const entry: CacheEntry<T> = { data, expiresAt, meta };
   localStorage.setItem(getCacheKey(type, marketId), JSON.stringify(entry));

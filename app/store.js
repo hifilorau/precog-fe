@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { calculatePnL, getCurrentPrice } from './utils/formatters';
+import { getCurrentPrice } from './utils/formatters';
 
 // Create context
 const StateContext = createContext(undefined);
@@ -91,7 +91,7 @@ export const StateProvider = ({ children }) => {
   // Reset state to initial state
   const resetState = useCallback(() => {
     setState(initialState);
-  }, [initialState]);
+  }, []);
 
   return (
     <StateContext.Provider value={{ ...state, updateState, resetState }}>

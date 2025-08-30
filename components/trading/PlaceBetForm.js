@@ -179,7 +179,7 @@ export default function PlaceBetForm({
     let maxBid, sellTarget, stopLoss
     
     // For limit buy orders, use the best ask from the order book if available
-    if (priceStats.bestAsk) {
+    if (priceStats.bestAsk && !isNaN(priceStats.bestAsk)) {
       // Set max_bid_price to slightly below best ask for better fills
       const bestAskPercent = priceStats.bestAsk * 100
       maxBid = Math.max(bestAskPercent - 0.2, 1).toFixed(2)
@@ -189,10 +189,10 @@ export default function PlaceBetForm({
     }
     
     // For take profit (sell price), use the best ask + increment if available
-    if (priceStats.bestAsk) {
+    if (priceStats.bestAsk && !isNaN(priceStats.bestAsk)) {
       const bestAskPercent = priceStats.bestAsk * 100
       sellTarget = Math.min(bestAskPercent + 2, 99).toFixed(2)
-    } else if (priceStats.dayHigh) {
+    } else if (priceStats.dayHigh && !isNaN(priceStats.dayHigh)) {
       // Fall back to day high if available
       const dayHigh = priceStats.dayHigh * 100
       sellTarget = Math.min(dayHigh + 2, 99).toFixed(2)
@@ -202,10 +202,10 @@ export default function PlaceBetForm({
     }
     
     // For stop loss, use the best bid - decrement if available
-    if (priceStats.bestBid) {
+    if (priceStats.bestBid && !isNaN(priceStats.bestBid)) {
       const bestBidPercent = priceStats.bestBid * 100
       stopLoss = Math.max(bestBidPercent - 2, 1).toFixed(2)
-    } else if (priceStats.dayLow) {
+    } else if (priceStats.dayLow && !isNaN(priceStats.dayLow)) {
       // Fall back to day low if available
       const dayLow = priceStats.dayLow * 100
       stopLoss = Math.max(dayLow - 2, 1).toFixed(2)
@@ -497,6 +497,17 @@ export default function PlaceBetForm({
       } catch (error) {
         console.error('Error fetching order book:', error)
         setOrderBookError(error.message || 'Failed to load order book')
+        
+        // Set fallback price stats based on current outcome probability
+        const currentPrice = outcome.probability || 0.5
+        setPriceStats({
+          dayHigh: Math.min(currentPrice * 1.1, 0.99),
+          dayLow: Math.max(currentPrice * 0.9, 0.01),
+          hourChange: null,
+          bestBid: Math.max(currentPrice * 0.98, 0.01),
+          bestAsk: Math.min(currentPrice * 1.02, 0.99),
+          spread: currentPrice * 0.04
+        })
       } finally {
         setOrderBookLoading(false)
       }

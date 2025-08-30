@@ -162,18 +162,6 @@ export default function TokenAllowance({ onAllowanceUpdated, className = '' }) {
     return groups;
   }, [formattedAllowances]);
   
-  // Format token amount for display
-  const formatTokenAmount = useCallback((amount) => {
-    if (!amount) return '0';
-    try {
-      const num = BigInt(amount);
-      if (num === 0n) return '0';
-      if (num >= 2n ** 255n) return '∞ (Unlimited)';
-      return num.toString();
-    } catch {
-      return amount;
-    }
-  }, []);
   
   // Check if all allowances are approved
   const allApproved = useMemo(() => {

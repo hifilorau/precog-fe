@@ -98,6 +98,8 @@ class PolymarketPriceService {
         }
 
         const data = await response.json();
+        console.log('Polymarket API response:', data);
+        console.log('Response status:', response.status);
         
         // Process results and update cache
         for (const param of uncachedParams) {
