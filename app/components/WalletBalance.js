@@ -14,12 +14,7 @@ export default function WalletBalance() {
         setLoading(true);
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
         const response = await fetch(
-          `${apiUrl}/wallet/balance/usdc`,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          }
+          `${apiUrl}/wallet/balance/usdc`
         );
 
         if (!response.ok) {

@@ -329,7 +329,7 @@ export default function PlaceBetForm({
 
       console.log('Sending position data to backend:', positionData);
 
-      const response = await fetch(`${NEXT_PUBLIC_API_URL}/positions/`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/positions/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
