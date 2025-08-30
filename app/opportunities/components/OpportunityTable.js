@@ -12,8 +12,6 @@ const OpportunityTable = ({
   sortOrder, 
   onSort 
 }) => {
-  const [trackingStates] = useState({});
-  const [trackingLoading] = useState({});
   const [quickBetMarket, setQuickBetMarket] = useState(null);
   const [quickBetOutcome, setQuickBetOutcome] = useState(null);
   const [showQuickBet, setShowQuickBet] = useState(false);

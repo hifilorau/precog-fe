@@ -18,7 +18,6 @@ const OpportunityDetailPage = () => {
   const [error, setError] = useState(null);
   const [priceHistory, setPriceHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
-  const [historyError, setHistoryError] = useState(null);
 
   const getDirectionIcon = (direction) => {
     if (direction === 'up') return '↗️';
@@ -42,7 +41,6 @@ const OpportunityDetailPage = () => {
     
     console.log(`Starting to fetch price history for market ${marketId}`);
     setLoadingHistory(true);
-    setHistoryError(null);
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
@@ -84,10 +82,8 @@ const OpportunityDetailPage = () => {
     } catch (err) {
       if (err.name === 'AbortError') {
         console.error('Price history fetch timed out after 10 seconds');
-        setHistoryError('Request timed out. Please try again.');
       } else {
         console.error('Error in fetchPriceHistory:', err);
-        setHistoryError(err.message || 'Failed to load price history');
       }
     } finally {
       clearTimeout(timeoutId);
@@ -173,7 +169,6 @@ const OpportunityDetailPage = () => {
       } catch (error) {
         if (error.name !== 'AbortError') {
           console.error('Error in price history effect:', error);
-          setHistoryError(`Failed to load price history: ${error.message}`);
         }
       }
     };
