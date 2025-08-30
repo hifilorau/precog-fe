@@ -76,9 +76,9 @@ export const StateProvider = ({ children }) => {
       };
       
       // Recalculate portfolio value when relevant data changes
-      const hasRelevantChanges = newState.balance !== undefined || 
-                                newState.mergedPositions !== undefined || 
-                                newState.currentPrices !== undefined;
+      const hasRelevantChanges = updatedState.balance !== prev.balance || 
+                                updatedState.mergedPositions !== prev.mergedPositions || 
+                                updatedState.currentPrices !== prev.currentPrices;
       
       if (hasRelevantChanges) {
         updatedState.portfolioValue = calculatePortfolioValue(updatedState);

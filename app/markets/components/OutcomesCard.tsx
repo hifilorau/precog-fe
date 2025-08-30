@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Market } from '@/lib/types/markets';
+import { Market, Outcome } from '@/lib/types/markets';
 import { Button } from '@/components/ui/button';
 import { TrendingUp } from 'lucide-react';
 import PlaceBetForm from '@/components/trading/PlaceBetForm';
@@ -11,7 +11,7 @@ interface OutcomesCardProps {
 }
 
 export default function OutcomesCard({ market }: OutcomesCardProps) {
-  const [selectedOutcome, setSelectedOutcome] = useState(null);
+  const [selectedOutcome, setSelectedOutcome] = useState<Outcome | null>(null);
   const [showBetForm, setShowBetForm] = useState(false);
   
   const outcomes = market?.outcomes || [];
@@ -19,12 +19,12 @@ export default function OutcomesCard({ market }: OutcomesCardProps) {
     return (b.current_price ?? b.probability) - (a.current_price ?? a.probability);
   });
   
-  const handleBuyClick = (outcome) => {
+  const handleBuyClick = (outcome: Outcome) => {
     setSelectedOutcome(outcome);
     setShowBetForm(true);
   };
   
-  const handleBetSuccess = (position) => {
+  const handleBetSuccess = (position: any) => {
     console.log('Position created:', position);
     setShowBetForm(false);
     setSelectedOutcome(null);
