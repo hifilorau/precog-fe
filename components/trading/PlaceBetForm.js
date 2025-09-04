@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect, useMemo,useCallback } from 'react'
+import React, { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, TrendingUp, Shield, Target, Sparkles, BookOpen, ArrowDown, ArrowUp, Wallet } from 'lucide-react'
 import { useStateContext } from '@/app/store'
 import { toast } from 'sonner'
+import { useRealTimePrices } from '@/hooks/useRealTimePrices'
 
 // Helper function to calculate number of shares based on balance and price
 const calculateShares = (balance, price, percentage = 0.08) => {
@@ -16,7 +17,7 @@ const calculateShares = (balance, price, percentage = 0.08) => {
   return Math.floor(amountToSpend / price);
 };
 
-export default function PlaceBetForm({ 
+function PlaceBetForm({ 
   market, 
   outcome, 
   onSuccess, 
@@ -64,12 +65,21 @@ export default function PlaceBetForm({
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [activeField, setActiveField] = useState(null)
   
-  // Order book data state
-  const [orderBook, setOrderBook] = useState(null)
-  const [orderBookLoading, setOrderBookLoading] = useState(false)
-  const [orderBookError, setOrderBookError] = useState(null)
+  // Create a single-item array for the useRealtimePrices hook
+  const outcomeForPricing = useMemo(() => {
+    if (!outcome || !market) return [];
+    return [{ outcome, market }];
+  }, [outcome, market]);
+
+  // Use the real-time prices hook for this specific outcome
+  const { currentPrices, loading: pricesLoading, error: pricesError } = useRealTimePrices(
+    outcomeForPricing,
+    `bet-form-${outcome?.id || 'unknown'}`,
+    'opportunity',
+    { pollMs: 0, immediate: true }
+  );
   
-  // Price statistics from historical data and order book
+  // Price statistics from historical data and real-time prices
   const [priceStats, setPriceStats] = useState({
     dayHigh: null,
     dayLow: null,
@@ -78,6 +88,21 @@ export default function PlaceBetForm({
     bestAsk: null,
     spread: null
   })
+
+  // Update price stats when real-time prices change
+  useEffect(() => {
+    if (!outcome?.id || !currentPrices.has(outcome.id)) return;
+    
+    const currentPrice = currentPrices.get(outcome.id);
+    if (currentPrice !== null && currentPrice !== undefined) {
+      setPriceStats(prev => ({
+        ...prev,
+        bestAsk: currentPrice, // For opportunities, this is the asking price
+        bestBid: currentPrice * 0.98, // Approximate bid as 2% below ask
+        spread: currentPrice * 0.02 // Approximate 2% spread
+      }));
+    }
+  }, [currentPrices, outcome?.id]);
 
 
   // Stable update form data function - defined early since it's used by other functions
@@ -92,7 +117,7 @@ export default function PlaceBetForm({
   const fetchWalletBalance = useCallback(async () => {
     try {
       setIsLoadingBalance(true);
-      const response = await fetch('/api/wallet/balance/usdc');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/wallet/balance/usdc`);
       if (!response.ok) throw new Error('Failed to fetch wallet balance');
       const { balance: usdcBalance } = await response.json();
       
@@ -171,7 +196,9 @@ export default function PlaceBetForm({
   }, [fetchWalletBalance, updateFormData, portfolioValue]);
 
   // Auto-fill price fields based on order book data and historical data
-  const autoFillPrices = () => {
+  const autoFillPrices = async () => {
+    // Ensure we have historical stats if user asks for auto-fill
+    await ensurePriceHistoryLoaded();
     const currentPricePercent = (outcome.probability * 100).toFixed(2)
     const currentPrice = parseFloat(currentPricePercent)
     
@@ -226,6 +253,11 @@ export default function PlaceBetForm({
   const handleFocus = (field) => {
     setActiveField(field)
     setShowSuggestions(true)
+    // Load history on-demand when opening suggestion-heavy fields
+    if (field === 'sell_price' || field === 'stop_loss_price' || field === 'max_bid_price') {
+      // Fire and forget
+      ensurePriceHistoryLoaded();
+    }
   }
   
   const handleBlur = () => {
@@ -446,137 +478,56 @@ export default function PlaceBetForm({
     }
   }
   
-  // Fetch order book data when component mounts
-  useEffect(() => {
-    if (!outcome?.clob_id) return;
-    
-    // Function to fetch order book data
-    const fetchOrderBook = async () => {
-      setOrderBookLoading(true)
-      try {
-        const url = `https://clob.polymarket.com/book?token_id=${outcome.clob_id}`
-        console.log('Fetching order book from URL:', url)
-        
-        const response = await fetch(url)
-        if (!response.ok) {
-          throw new Error(`Failed to fetch order book: ${response.status}`)
-        }
-        
-        const data = await response.json()
-        console.log('Received order book data:', data)
-        setOrderBook(data)
-        
-        // Extract best bid and ask prices
-        if (data) {
-          // Find highest bid (buy order)
-          let bestBid = null
-          if (data.bids && data.bids.length > 0) {
-            bestBid = Math.max(...data.bids.map(bid => bid.price))
-          }
-          
-          // Find lowest ask (sell order)
-          let bestAsk = null
-          if (data.asks && data.asks.length > 0) {
-            bestAsk = Math.min(...data.asks.map(ask => ask.price))
-          }
-          
-          // Calculate spread
-          let spread = null
-          if (bestBid !== null && bestAsk !== null) {
-            spread = bestAsk - bestBid
-          }
-          
-          // Update price statistics with order book data
-          setPriceStats(prev => ({
-            ...prev,
-            bestBid,
-            bestAsk,
-            spread
-          }))
-        }
-      } catch (error) {
-        console.error('Error fetching order book:', error)
-        setOrderBookError(error.message || 'Failed to load order book')
-        
-        // Set fallback price stats based on current outcome probability
-        const currentPrice = outcome.probability || 0.5
-        setPriceStats({
-          dayHigh: Math.min(currentPrice * 1.1, 0.99),
-          dayLow: Math.max(currentPrice * 0.9, 0.01),
-          hourChange: null,
-          bestBid: Math.max(currentPrice * 0.98, 0.01),
-          bestAsk: Math.min(currentPrice * 1.02, 0.99),
-          spread: currentPrice * 0.04
-        })
-      } finally {
-        setOrderBookLoading(false)
-      }
-    }
-    
-    // Fetch order book initially
-    fetchOrderBook()
-    
-    // Set up polling for order book updates
-    const intervalId = setInterval(() => {
-      fetchOrderBook()
-    }, 15000) // Update every 15 seconds
-    
-    return () => clearInterval(intervalId)
-  }, [outcome?.clob_id])
   
-  // Fetch price history data for 24h high/low
-  useEffect(() => {
-    if (!market?.id) return
-    
-    const fetchPriceHistory = async () => {
-      try {
-        // Get the last 24 hours of price history data
-        const yesterday = new Date()
-        yesterday.setDate(yesterday.getDate() - 1)
-        
-        const startTimeParam = yesterday.toISOString()
-        const url = `${process.env.NEXT_PUBLIC_API_URL}markets/${market.id}/price-history?interval=hour&start_time=${startTimeParam}`
-        
-        const response = await fetch(url)
-        if (!response.ok) {
-          throw new Error('Failed to fetch price history')
+  // Lazily fetch price history (24h) only when needed
+  const priceHistoryRequestedRef = useRef(false);
+  const ensurePriceHistoryLoaded = useCallback(async () => {
+    if (!market?.id || !outcome?.id) return;
+    if (priceHistoryRequestedRef.current) return;
+    priceHistoryRequestedRef.current = true;
+
+    const abortController = new AbortController();
+    try {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const startTimeParam = yesterday.toISOString();
+      const base = process.env.NEXT_PUBLIC_API_URL?.replace(/\/?$/, '/');
+      const url = `${base}markets/${market.id}/price-history?interval=hour&start_time=${startTimeParam}`;
+
+      const response = await fetch(url, { signal: abortController.signal });
+      if (!response.ok) throw new Error('Failed to fetch price history');
+      const data = await response.json();
+
+      if (data?.outcomes && data.outcomes.length > 0) {
+        const outcomeData = data.outcomes.find(o => o.outcome_id === outcome.id) || data.outcomes[0];
+        if (outcomeData?.prices && outcomeData.prices.length > 0) {
+          const prices = outcomeData.prices.map(p => p.price);
+          const dayHigh = Math.max(...prices);
+          const dayLow = Math.min(...prices);
+          const recentPrice = prices[prices.length - 1] || outcome.probability;
+          const hourAgoPrice = prices.length > 1 ? prices[prices.length - 2] : recentPrice;
+          const hourChange = recentPrice - hourAgoPrice;
+          setPriceStats(prev => ({ ...prev, dayHigh, dayLow, hourChange }));
         }
-        
-        const data = await response.json()
-        
-        // Calculate price statistics
-        if (data?.outcomes && data.outcomes.length > 0) {
-          const outcomeData = data.outcomes.find(o => o.outcome_id === outcome.id) || data.outcomes[0]
-          if (outcomeData?.prices && outcomeData.prices.length > 0) {
-            const prices = outcomeData.prices.map(p => p.price)
-            
-            // Calculate day stats
-            const dayHigh = Math.max(...prices)
-            const dayLow = Math.min(...prices)
-            
-            // Calculate hour change (most recent vs. hour ago)
-            const recentPrice = prices[prices.length - 1] || outcome.probability
-            const hourAgoPrice = prices.length > 1 ? prices[prices.length - 2] : recentPrice
-            const hourChange = recentPrice - hourAgoPrice
-            
-            // Update price stats (preserve order book data)
-            setPriceStats(prev => ({
-              ...prev,
-              dayHigh,
-              dayLow,
-              hourChange
-            }))
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching price history:', error)
+      }
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        console.error('Error fetching price history:', error);
       }
     }
-    
-    fetchPriceHistory()
-  }, [market?.id, outcome?.id, outcome?.probability])
+    // no explicit abort on unmount; single-shot fetch guarded by ref
+  }, [market?.id, outcome?.id, outcome?.probability]);
   
   const currentPrice = outcome.probability || 0.5
+
+  // Memoized PnL previews for UI labels
+  const potentialGain = useMemo(() => (
+    calculateSellTargetAmount(formData.sell_price, formData.volume, formData.max_bid_price)
+  ), [formData.sell_price, formData.volume, formData.max_bid_price]);
+
+  const potentialLoss = useMemo(() => (
+    calculateStopLossAmount(formData.stop_loss_price, formData.volume, formData.max_bid_price)
+  ), [formData.stop_loss_price, formData.volume, formData.max_bid_price]);
 
   // Set initial values when outcome changes (not on every render)
   useEffect(() => {
@@ -617,45 +568,36 @@ export default function PlaceBetForm({
             <p><strong>Outcome:</strong> {outcome.name}</p>
             <p>
               <strong>Current Price:</strong> {(currentPrice * 100).toFixed(1)}¢
-              {orderBookLoading && <Loader2 className="ml-1 h-3 w-3 inline animate-spin" />}
+              {pricesLoading && <Loader2 className="ml-1 h-3 w-3 inline animate-spin" />}
             </p>
             
-            {/* Order Book Data */}
+            {/* Real-time Price Data */}
             {priceStats.bestBid !== null && priceStats.bestAsk !== null && (
               <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
                 <div className="flex items-center gap-1 mb-1">
                   <BookOpen className="h-4 w-4 text-gray-600" />
-                  <span className="text-sm font-medium text-gray-700">Order Book</span>
+                  <span className="text-sm font-medium text-gray-700">Market Data</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="flex items-center">
                     <ArrowUp className="h-3 w-3 text-green-600 mr-1" />
-                    <span>Best Bid: </span>
+                    <span>Bid: </span>
                     <span className="ml-auto font-medium text-green-600">{(priceStats.bestBid * 100).toFixed(2)}¢</span>
-                    {orderBook?.bids?.length > 0 && (
-                      <span className="ml-1 text-xs text-gray-500">({orderBook.bids.length})</span>
-                    )}
                   </div>
                   <div className="flex items-center">
                     <ArrowDown className="h-3 w-3 text-red-600 mr-1" />
-                    <span>Best Ask: </span>
+                    <span>Ask: </span>
                     <span className="ml-auto font-medium text-red-600">{(priceStats.bestAsk * 100).toFixed(2)}¢</span>
-                    {orderBook?.asks?.length > 0 && (
-                      <span className="ml-1 text-xs text-gray-500">({orderBook.asks.length})</span>
-                    )}
                   </div>
-                  {priceStats.spread !== null && (
-                    <div className="col-span-2 mt-1 flex justify-between">
-                      <span>Spread: </span>
-                      <span className="font-medium">{(priceStats.spread * 100).toFixed(2)}¢</span>
-                      <span className="text-xs text-gray-500">
-                        Updated: {orderBook?.timestamp ? new Date(orderBook.timestamp).toLocaleTimeString() : 'now'}
-                      </span>
-                    </div>
-                  )}
-                </div>
+            {priceStats.spread !== null && (
+              <div className="col-span-2 mt-1 flex justify-between">
+                <span>Spread: </span>
+                <span className="font-medium">{(priceStats.spread * 100).toFixed(2)}¢</span>
               </div>
             )}
+          </div>
+        </div>
+      )}
             
             {/* Historical Data */}
             {priceStats.hourChange !== null && (
@@ -675,9 +617,9 @@ export default function PlaceBetForm({
               </p>
             )}
             
-            {orderBookError && (
+            {pricesError && (
               <p className="text-xs text-red-500 mt-1">
-                Order book error: {orderBookError}
+                Price data error: {pricesError.message || 'Failed to load prices'}
               </p>
             )}
           </div>
@@ -810,14 +752,11 @@ export default function PlaceBetForm({
               <TrendingUp className="h-4 w-4 text-green-600" />
               Sell Target Price (¢)
             </Label>
-            {(() => {
-              const potentialGain = calculateSellTargetAmount(formData.sell_price, formData.volume, formData.max_bid_price);
-              return potentialGain ? (
-                <span className="text-xs text-green-600 font-medium">
-                  +${potentialGain.toFixed(2)} gain
-                </span>
-              ) : null;
-            })()}
+            {potentialGain ? (
+              <span className="text-xs text-green-600 font-medium">
+                +${potentialGain.toFixed(2)} gain
+              </span>
+            ) : null}
           </div>
           <div className="relative">
             <Input
@@ -859,14 +798,11 @@ export default function PlaceBetForm({
               <Shield className="h-4 w-4 text-red-600" />
               Stop Loss Price (¢)
             </Label>
-            {(() => {
-              const potentialLoss = calculateStopLossAmount(formData.stop_loss_price, formData.volume, formData.max_bid_price);
-              return potentialLoss ? (
-                <span className="text-xs text-red-600 font-medium">
-                  -${potentialLoss.toFixed(2)} loss
-                </span>
-              ) : null;
-            })()}
+            {potentialLoss ? (
+              <span className="text-xs text-red-600 font-medium">
+                -${potentialLoss.toFixed(2)} loss
+              </span>
+            ) : null}
           </div>
           <div className="relative">
             <Input
@@ -933,3 +869,5 @@ export default function PlaceBetForm({
     </div>
   )
 }
+
+export default memo(PlaceBetForm);

@@ -8,13 +8,15 @@ import polymarketPriceService from '../services/polymarketPriceService';
  * @param {string} [type='opportunity'] - Type of items: 'opportunity' or 'position'
  * @returns {Object} { currentPrices, loading, error, refreshPrices }
  */
-export const useRealTimePrices = (items, key, type = 'opportunity') => {
+export const useRealTimePrices = (items, key, type = 'opportunity', options = {}) => {
   const [currentPrices, setCurrentPrices] = useState(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const pollMs = typeof options.pollMs === 'number' ? options.pollMs : 15000;
+  const immediate = options.immediate !== false; // default true
+
   const fetchPrices = useCallback(async () => {
-    console.log('fetching prices for', type, items?.length || 0, 'items');
     if (!items || items.length === 0) {
       setCurrentPrices(new Map());
       return;
@@ -39,14 +41,17 @@ export const useRealTimePrices = (items, key, type = 'opportunity') => {
 
   // Fetch prices on mount and when items or key changes
   useEffect(() => {
-    fetchPrices();
-    
-    // Set up interval for refreshing prices (e.g., every 15 seconds)
-    const intervalId = setInterval(fetchPrices, 15000);
-    
-    // Clean up interval on unmount or when dependencies change
-    return () => clearInterval(intervalId);
-  }, [fetchPrices, key]);
+    if (immediate) {
+      fetchPrices();
+    }
+    let intervalId = null;
+    if (pollMs && pollMs > 0) {
+      intervalId = setInterval(fetchPrices, pollMs);
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [fetchPrices, key, pollMs, immediate]);
 
   // Refresh prices manually
   const refreshPrices = useCallback(() => {

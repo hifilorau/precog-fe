@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRealTimePrices } from '../../../hooks/useRealTimePrices';
 import QuickBetModal from '../../positions/components/QuickBetModal';
+import { Info } from 'lucide-react';
+import { toast } from 'sonner';
 
 const OpportunityTable = ({ 
   opportunities, 
@@ -15,6 +17,7 @@ const OpportunityTable = ({
   const [quickBetMarket, setQuickBetMarket] = useState(null);
   const [quickBetOutcome, setQuickBetOutcome] = useState(null);
   const [showQuickBet, setShowQuickBet] = useState(false);
+  const [filteredOpportunities, setFilteredOpportunities] = useState(opportunities);
   
   // Fetch real-time prices for all opportunities
   const { currentPrices, loading: pricesLoading, refreshPrices } = useRealTimePrices(opportunities, 'opportunities', 'opportunity');
@@ -24,6 +27,40 @@ const OpportunityTable = ({
     setQuickBetOutcome(outcome);
     setShowQuickBet(true);
   };
+
+  const handleCopyId = async (id, type) => {
+    try {
+      await navigator.clipboard.writeText(id);
+      toast.success(`${type} ID copied to clipboard`);
+    } catch (error) {
+      console.error(`Failed to copy ${type} ID:`, error);
+      toast.error(`Failed to copy ${type} ID`);
+    }
+  };
+
+  // Filter out opportunities that don't have valid prices once real-time prices are loaded
+  useEffect(() => {
+    if (!pricesLoading && currentPrices.size > 0) {
+      const validOpportunities = opportunities.filter((opportunity) => {
+        // If opportunity has an outcome, check if we have a valid price for it
+        if (opportunity.outcome?.id) {
+          const currentPrice = currentPrices.get(opportunity.outcome.id);
+          return currentPrice !== undefined && currentPrice !== null && currentPrice > 0;
+        }
+        // If no outcome ID, keep the opportunity (fallback to captured price)
+        return true;
+      });
+      
+      // Only update if the filtered list is different
+      if (validOpportunities.length !== filteredOpportunities.length) {
+        console.log(`Filtered out ${opportunities.length - validOpportunities.length} opportunities without valid prices`);
+        setFilteredOpportunities(validOpportunities);
+      }
+    } else if (opportunities !== filteredOpportunities) {
+      // Reset to all opportunities when prices are loading or haven't loaded yet
+      setFilteredOpportunities(opportunities);
+    }
+  }, [opportunities, currentPrices, pricesLoading, filteredOpportunities]);
 
   const formatPercentage = (value) => {
     if (value === null || value === undefined) return 'N/A';
@@ -151,11 +188,11 @@ const OpportunityTable = ({
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {opportunities.map((opportunity) => (
+                  {filteredOpportunities.map((opportunity) => (
                     <tr key={opportunity.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
                             <div className="text-sm font-medium text-gray-900">
                               {opportunity.market?.name || 'N/A'}
                             </div>
@@ -164,8 +201,26 @@ const OpportunityTable = ({
                                 {opportunity.outcome.name}
                               </div>
                             )}
+                            {getTippingPointBadge(opportunity)}
                           </div>
-                          {getTippingPointBadge(opportunity)}
+                          <div className="flex flex-col gap-1 ml-2">
+                            <button
+                              onClick={() => handleCopyId(opportunity.id, 'Opportunity')}
+                              className="p-1 h-6 w-6 text-gray-400 hover:text-gray-600 transition-colors"
+                              title={`Copy Opportunity ID: ${opportunity.id}`}
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                            {opportunity.market?.id && (
+                              <button
+                                onClick={() => handleCopyId(opportunity.market.id, 'Market')}
+                                className="p-1 h-6 w-6 text-blue-400 hover:text-blue-600 transition-colors"
+                                title={`Copy Market ID: ${opportunity.market.id}`}
+                              >
+                                <Info className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

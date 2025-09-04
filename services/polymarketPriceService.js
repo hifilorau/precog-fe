@@ -98,8 +98,6 @@ class PolymarketPriceService {
         }
 
         const data = await response.json();
-        console.log('Polymarket API response:', data);
-        console.log('Response status:', response.status);
         
         // Process results and update cache
         for (const param of uncachedParams) {
@@ -133,9 +131,7 @@ class PolymarketPriceService {
    */
   async _getPricesForItems(items, side = 'buy') {
     const tokenParams = [];
-    console.log('getting prices in getPricesforItems')
     for (const item of items) {
-      console.log('item', item)
       // Try to get CLOB token ID from item
       let tokenId = null;
       let outcomeId = null;
@@ -179,7 +175,6 @@ class PolymarketPriceService {
     }
 
     if (tokenParams.length === 0) return new Map();
-    console.log('tokenParams', tokenParams)
     const priceMap = await this.getPrices(tokenParams);
     const resultPrices = new Map();
 

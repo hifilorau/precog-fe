@@ -157,7 +157,7 @@ export default function MarketDetailPage() {
 
   if (loading) return <div className="p-6"><MarketInfoSkeleton /></div>;
   if (error) return <div className="p-6 text-destructive">{error}</div>;
-  console.log('market volatility', market?.volatility);
+  // Reduced console noise for performance
   return (
     <div className="p-6 space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

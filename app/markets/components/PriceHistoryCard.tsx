@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { PriceHistoryResponse } from '@/lib/types/markets';
 import PriceHistoryChart from './PriceHistoryChart';
 
@@ -14,7 +15,7 @@ interface PriceHistoryCardProps {
   highlightedOutcomeId?: string | number;
 }
 
-export default function PriceHistoryCard({
+function PriceHistoryCard({
   priceHistory,
   priceHistoryLoading,
   handleIntervalChange,
@@ -22,13 +23,7 @@ export default function PriceHistoryCard({
   showOnlyHighlighted = false,
   highlightedOutcomeId,
 }: PriceHistoryCardProps) {
-  console.log('PriceHistoryCard - Props:', {
-    priceHistory,
-    priceHistoryLoading,
-    market,
-    showOnlyHighlighted,
-    highlightedOutcomeId
-  });
+  // removed verbose logging to keep UI responsive
   // Patch the price history with the freshest outcome price if needed
   let patchedPriceHistory = priceHistory;
   if (priceHistory && market && market.outcomes && priceHistory.outcomes) {
@@ -91,3 +86,4 @@ export default function PriceHistoryCard({
   );
 }
 
+export default memo(PriceHistoryCard);

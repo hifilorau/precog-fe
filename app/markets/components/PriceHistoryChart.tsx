@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { PriceHistoryResponse } from '@/lib/types/markets';
 import styles from './PriceHistoryChart.module.css';
@@ -38,87 +38,66 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({
   highlightOutcomeId,
   showOnlyHighlighted = false 
 }) => {
-  console.log('PriceHistoryChart - Props:', { data, highlightOutcomeId, showOnlyHighlighted });
-  
-  if (!data || !data.outcomes || Object.keys(data.outcomes).length === 0) {
-    console.log('No outcomes data available');
-    return <p className="text-gray-500">No price history available to chart.</p>;
-  }
   if (!data || !data.outcomes || Object.keys(data.outcomes).length === 0) {
     return <p className="text-gray-500">No price history available to chart.</p>;
   }
 
   // Filter outcomes if showOnlyHighlighted is true and we have a highlightOutcomeId
-  const filteredOutcomes = showOnlyHighlighted && highlightOutcomeId
-    ? Object.fromEntries(
-        Object.entries(data.outcomes).filter(([key, outcome]) => 
-          key === highlightOutcomeId.toString() || 
-          outcome.name === highlightOutcomeId.toString() ||
-          key.toLowerCase() === highlightOutcomeId.toString().toLowerCase() ||
-          outcome.name?.toLowerCase() === highlightOutcomeId.toString().toLowerCase()
+  const filteredOutcomes = useMemo(() => {
+    if (showOnlyHighlighted && highlightOutcomeId) {
+      const idStr = highlightOutcomeId.toString();
+      return Object.fromEntries(
+        Object.entries(data.outcomes).filter(([key, outcome]) =>
+          key === idStr ||
+          outcome.name === idStr ||
+          key.toLowerCase() === idStr.toLowerCase() ||
+          outcome.name?.toLowerCase() === idStr.toLowerCase()
         )
-      )
-    : data.outcomes;
-    
-  console.log('Filtered outcomes:', {
-    showOnlyHighlighted,
-    highlightOutcomeId,
-    allOutcomeKeys: Object.keys(data.outcomes),
-    allOutcomeNames: Object.values(data.outcomes).map(o => o.name),
-    filteredOutcomeKeys: Object.keys(filteredOutcomes)
-  });
-    
-  console.log('Filtered outcomes:', {
-    showOnlyHighlighted,
-    highlightOutcomeId,
-    allOutcomeIds: Object.keys(data.outcomes),
-    filteredOutcomeIds: Object.keys(filteredOutcomes)
-  });
+      );
+    }
+    return data.outcomes;
+  }, [data.outcomes, highlightOutcomeId, showOnlyHighlighted]);
 
   // We need to transform the data into a format that recharts can easily use.
   // The goal is an array of objects, where each object represents a point in time
   // and has a key for each outcome's price at that time.
 
-  const allTimestamps = new Set<string>();
-  Object.values(filteredOutcomes).forEach(outcome => {
-    outcome.prices.forEach(pricePoint => {
-      allTimestamps.add(new Date(pricePoint.timestamp).toISOString());
-    });
-  });
-
-  const sortedTimestamps = Array.from(allTimestamps).sort();
-
-  const chartData: ChartDataPoint[] = sortedTimestamps.map(timestamp => {
-    const dataPoint: ChartDataPoint = { timestamp };
+  const chartData: ChartDataPoint[] = useMemo(() => {
+    // Pre-index each outcome's prices by ISO timestamp for O(1) lookup
+    const indexByOutcome: Record<string, Record<string, number>> = {};
+    const allTimestamps = new Set<string>();
     Object.values(filteredOutcomes).forEach(outcome => {
-      const pricePoint = outcome.prices.find(p => new Date(p.timestamp).toISOString() === timestamp);
-      // Type guard to ensure 'price' exists
-      if (pricePoint && 'price' in pricePoint) {
-        dataPoint[outcome.name] = pricePoint.price;
-      } else {
-        dataPoint[outcome.name] = null;
-      }
+      const map: Record<string, number> = {};
+      outcome.prices.forEach(p => {
+        const t = new Date(p.timestamp).toISOString();
+        allTimestamps.add(t);
+        // @ts-ignore
+        if (p && typeof p.price === 'number') {
+          // @ts-ignore
+          map[t] = p.price;
+        }
+      });
+      indexByOutcome[outcome.name] = map;
     });
-    return dataPoint;
-  });
+    const sortedTimestamps = Array.from(allTimestamps).sort();
+    return sortedTimestamps.map(timestamp => {
+      const dataPoint: ChartDataPoint = { timestamp };
+      Object.values(filteredOutcomes).forEach(outcome => {
+        const val = indexByOutcome[outcome.name]?.[timestamp] ?? null;
+        dataPoint[outcome.name] = val as number | null;
+      });
+      return dataPoint;
+    });
+  }, [filteredOutcomes]);
 
-  const outcomes = Object.entries(filteredOutcomes).map(([id, outcome]) => {
-    const isHighlighted = id === highlightOutcomeId?.toString() || 
-                         outcome.name === highlightOutcomeId?.toString() ||
-                         id.toLowerCase() === highlightOutcomeId?.toString().toLowerCase() ||
-                         outcome.name?.toLowerCase() === highlightOutcomeId?.toString().toLowerCase();
-    console.log(`Outcome ${id} (${outcome.name}):`, {
-      isHighlighted,
-      pricePoints: outcome.prices?.length || 0,
-      firstFewPrices: outcome.prices?.slice(0, 3)
-    });
-    
-    return {
-      id,
-      name: outcome.name,
-      isHighlighted
-    };
-  });
+  const outcomes = useMemo(() => Object.entries(filteredOutcomes).map(([id, outcome]) => {
+    const idStr = highlightOutcomeId?.toString();
+    const isHighlighted = id === idStr ||
+      outcome.name === idStr ||
+      id.toLowerCase() === idStr?.toLowerCase() ||
+      outcome.name?.toLowerCase() === idStr?.toLowerCase();
+    return { id, name: outcome.name, isHighlighted };
+  }), [filteredOutcomes, highlightOutcomeId]);
 
   return (
     <ResponsiveContainer width="100%" height={400}>
@@ -170,4 +149,4 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({
   );
 };
 
-export default PriceHistoryChart;
+export default React.memo(PriceHistoryChart);
