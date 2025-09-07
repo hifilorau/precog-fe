@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock, Edit, Plus, Minus, Info } from 'lucide-react'
+import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock, Edit, Plus, Minus, Info, ChevronRight, ChevronDown, Copy, XCircle, RotateCw } from 'lucide-react'
 import EditPositionModal from './EditPositionModal'
 import QuickBetModal from './QuickBetModal'
 
@@ -33,6 +33,9 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
   const [showEditModal, setShowEditModal] = useState(false)
   const [buyMorePosition, setBuyMorePosition] = useState(null)
   const [showBuyMoreModal, setShowBuyMoreModal] = useState(false)
+  // Orders/expansion state
+  const [expanded, setExpanded] = useState({}) // { [positionId]: boolean }
+  const [ordersByPosition, setOrdersByPosition] = useState({}) // { [positionId]: { orders: Order[], fetchedAt: number, loading?: boolean, error?: string } }
   const { mergedPositions, updateState } = useStateContext()
   
   // Real-time price context
@@ -44,6 +47,163 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
   
   // Periodic balance refresh (every 30 seconds)
   usePeriodicBalance(30000, true)
+
+  // Helpers for orders API
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
+  const ORDERS_CACHE_TTL_MS = 30_000
+
+  const fetchOrdersForPosition = async (positionId, { force = false } = {}) => {
+    try {
+      setOrdersByPosition(prev => ({
+        ...prev,
+        [positionId]: { ...(prev[positionId] || {}), loading: true, error: undefined },
+      }))
+
+      const cached = ordersByPosition[positionId]
+      const isFresh = cached && cached.fetchedAt && Date.now() - cached.fetchedAt < ORDERS_CACHE_TTL_MS
+      if (cached && isFresh && !force) {
+        // Use fresh cache
+        setOrdersByPosition(prev => ({
+          ...prev,
+          [positionId]: { ...cached, loading: false, error: undefined },
+        }))
+        return cached.orders
+      }
+
+      const url = `${API_URL}/orders?position_id=${encodeURIComponent(positionId)}`
+      const res = await fetch(url, { cache: 'no-store' })
+      if (!res.ok) {
+        const detail = await res.text().catch(() => res.statusText)
+        throw new Error(detail || `Failed to load orders (${res.status})`)
+      }
+      const orders = await res.json()
+
+      setOrdersByPosition(prev => ({
+        ...prev,
+        [positionId]: { orders: Array.isArray(orders) ? orders.slice(0, 10) : [], fetchedAt: Date.now(), loading: false, error: undefined },
+      }))
+      return orders
+    } catch (e) {
+      console.error('Failed to fetch orders for position', positionId, e)
+      setOrdersByPosition(prev => ({
+        ...prev,
+        [positionId]: { ...(prev[positionId] || {}), loading: false, error: e?.message || 'Failed to load orders' },
+      }))
+      toast.error('Failed to load orders')
+      return []
+    }
+  }
+
+  const toggleExpanded = async (positionId) => {
+    setExpanded(prev => {
+      const next = { ...prev, [positionId]: !prev[positionId] }
+      return next
+    })
+    // On expand, fetch orders
+    if (!expanded[positionId]) {
+      await fetchOrdersForPosition(positionId)
+    }
+  }
+
+  const refreshOrders = async (positionId) => {
+    await fetchOrdersForPosition(positionId, { force: true })
+  }
+
+  const copyExternalId = async (externalId) => {
+    try {
+      await navigator.clipboard.writeText(externalId)
+      toast.success('External order ID copied')
+    } catch {
+      toast.error('Failed to copy ID')
+    }
+  }
+
+  const cancelOrder = async (orderId, positionId) => {
+    try {
+      const res = await fetch(`${API_URL}/orders/${encodeURIComponent(orderId)}/cancel`, { method: 'POST' })
+      if (!res.ok) {
+        const detail = await res.text().catch(() => res.statusText)
+        throw new Error(detail || 'Failed to cancel order')
+      }
+      toast.success('Order cancelled')
+      await refreshOrders(positionId)
+    } catch (e) {
+      console.error('Cancel order failed', e)
+      toast.error(e?.message || 'Failed to cancel order')
+    }
+  }
+
+  // Optional: Retry is backend-defined; here we just surface a stub
+  const retryOrder = async (order, positionId) => {
+    toast.info('Retrying order…')
+    // If a retry endpoint exists, call it here, then refresh orders
+    // await fetch(`${API_URL}/orders/${order.id}/retry`, { method: 'POST' })
+    await refreshOrders(positionId)
+  }
+
+  const getOrderStatusMeta = (status) => {
+    const map = {
+      pending: { color: 'text-yellow-600', icon: '⏳' },
+      submitted: { color: 'text-blue-600', icon: '🔵' },
+      filled: { color: 'text-green-600', icon: '✅' },
+      cancelled: { color: 'text-red-600', icon: '🔴' },
+      rejected: { color: 'text-red-800', icon: '❌' },
+    }
+    return map[status] || { color: 'text-gray-600', icon: 'ℹ️' }
+  }
+
+  const formatRelativeTime = (iso) => {
+    if (!iso) return ''
+    const diff = Date.now() - Date.parse(iso)
+    const seconds = Math.floor(diff / 1000)
+    const minutes = Math.floor(seconds / 60)
+    const hours = Math.floor(minutes / 60)
+    const days = Math.floor(hours / 24)
+    if (days > 0) return `${days}d ago`
+    if (hours > 0) return `${hours}h ago`
+    if (minutes > 0) return `${minutes}m ago`
+    return `${seconds}s ago`
+  }
+
+  const renderOrderBadge = (position) => {
+    const cache = ordersByPosition[position.id]
+    const summary = position.order_summary
+    if (summary) {
+      const nonFilled = (summary.pending_orders || 0) + (summary.cancelled_orders || 0)
+      if (nonFilled === 0) return null
+      const label = []
+      if (summary.pending_orders) label.push(`${summary.pending_orders} pending`)
+      if (summary.cancelled_orders) label.push(`${summary.cancelled_orders} cancelled`)
+      const issues = summary.has_recent_failures ? ' ⚠️ Issues' : ''
+      const text = `${label.join(', ')}${issues}`
+      return (
+        <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground" title={summary.last_order_attempt ? `Last attempt ${formatRelativeTime(summary.last_order_attempt)}` : ''}>
+          {text}
+        </span>
+      )
+    }
+    // Fallback: compute from cached orders if available
+    if (cache && Array.isArray(cache.orders)) {
+      const counts = cache.orders.reduce((acc, o) => {
+        if (o.status !== 'filled') acc.nonFilled++
+        if (o.status === 'pending') acc.pending++
+        if (o.status === 'cancelled') acc.cancelled++
+        if (o.status === 'rejected') acc.rejected++
+        return acc
+      }, { nonFilled: 0, pending: 0, cancelled: 0, rejected: 0 })
+      if (counts.nonFilled === 0) return null
+      const bits = []
+      if (counts.pending) bits.push(`${counts.pending} pending`)
+      if (counts.cancelled) bits.push(`${counts.cancelled} cancelled`)
+      if (counts.rejected) bits.push(`${counts.rejected} rejected`)
+      return (
+        <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+          {bits.join(', ')}
+        </span>
+      )
+    }
+    return null
+  }
 
   // Derive positions to show with a strict filter on zero-value closed/resolved-lost
   const allPositions = Array.isArray(mergedPositions) ? mergedPositions : []
@@ -105,6 +265,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
     // Fetch fresh data in background
     fetchPositionsData()
     return () => { isMounted = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshTrigger, updateState]) // mergedPositions intentionally excluded to prevent infinite loop
 
   // Update global state with current prices when they change
@@ -316,11 +477,15 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                     <div className="lg:col-span-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="font-medium text-sm truncate mb-1" title={position.market?.question}>
+                          <div className="font-medium text-sm mb-1" title={position.market?.question}>
                             {position.market?.question || 'Unknown Market'}
                           </div>
                           <div className="text-sm text-muted-foreground mb-1">
                             {outcomeLabel}
+                          </div>
+                          {/* Order status indicator badge (summary) */}
+                          <div className="mt-1">
+                            {renderOrderBadge(position)}
                           </div>
                           {position.market?.status === 'closed' && (
                             <div className="text-xs">
@@ -342,6 +507,22 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                           title={`Copy Position ID: ${position.id}`}
                         >
                           <Info className="h-3 w-3" />
+                        </Button>
+                        {/* Expand/Collapse orders */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleExpanded(position.id)}
+                          className="p-1 h-6 w-6 ml-1"
+                          title={expanded[position.id] ? 'Hide Orders' : 'Show Orders'}
+                          aria-expanded={!!expanded[position.id]}
+                          aria-controls={`orders-${position.id}`}
+                        >
+                          {expanded[position.id] ? (
+                            <ChevronDown className="h-3 w-3" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3" />
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -625,10 +806,106 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                         })()}
                       </div>
                     </div>
-                  </div>
                 </div>
-              )
-            })}
+                {/* Expandable Orders Section */}
+                {expanded[position.id] && (
+                  <div id={`orders-${position.id}`} className="mt-3 border-t pt-3 text-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-medium">Orders</div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => refreshOrders(position.id)} className="h-7 px-2">
+                          <RefreshCw className="h-3 w-3 mr-1" /> Refresh
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2"
+                          onClick={async () => {
+                            const cache = ordersByPosition[position.id]
+                            if (!cache?.orders) return
+                            const pending = cache.orders.filter(o => o.status === 'pending' || o.status === 'submitted')
+                            for (const o of pending) {
+                              await cancelOrder(o.id, position.id)
+                            }
+                          }}
+                        >
+                          <XCircle className="h-3 w-3 mr-1" /> Cancel pending
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2"
+                          onClick={async () => {
+                            const cache = ordersByPosition[position.id]
+                            if (!cache?.orders) return
+                            const failed = cache.orders.filter(o => o.status === 'cancelled' || o.status === 'rejected')
+                            for (const o of failed) {
+                              await retryOrder(o, position.id)
+                            }
+                          }}
+                        >
+                          <RotateCw className="h-3 w-3 mr-1" /> Retry failed
+                        </Button>
+                      </div>
+                    </div>
+                    {ordersByPosition[position.id]?.loading ? (
+                      <div className="flex items-center text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin mr-2" /> Loading…</div>
+                    ) : ordersByPosition[position.id]?.error ? (
+                      <div className="text-red-600">{ordersByPosition[position.id]?.error}</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {(ordersByPosition[position.id]?.orders || []).map((o, idx) => {
+                          const meta = getOrderStatusMeta(o.status)
+                          const ts = o.submitted_at || o.created_at || o.filled_at
+                          const side = (o.side || '').toUpperCase()
+                          const price = o.price != null ? formatPrice(o.price) : '—'
+                          const qty = o.quantity != null ? o.quantity : o.filled_quantity || 0
+                          const externalIdShort = o.external_order_id ? `${o.external_order_id.slice(0, 10)}…` : '—'
+                          return (
+                            <div key={o.id || `${position.id}-${idx}`} className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className={`flex items-center gap-2 ${meta.color}`}>
+                                  <span>{meta.icon}</span>
+                                  <span className="font-medium uppercase tracking-wide text-xs">{o.status}</span>
+                                  <span className="text-muted-foreground">- {side} {qty} @ {price}</span>
+                                  {ts && (
+                                    <span className="text-muted-foreground">({new Date(ts).toLocaleString()})</span>
+                                  )}
+                                </div>
+                                {o.external_order_id && (
+                                  <div className="text-xs text-muted-foreground mt-0.5">
+                                    External ID: <span className="font-mono">{externalIdShort}</span>
+                                    <Button variant="ghost" size="sm" className="h-6 px-1 ml-1" onClick={() => copyExternalId(o.external_order_id)} title={o.external_order_id}>
+                                      <Copy className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {(o.status === 'pending' || o.status === 'submitted') && (
+                                  <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => cancelOrder(o.id, position.id)}>
+                                    <XCircle className="h-3 w-3 mr-1" /> Cancel
+                                  </Button>
+                                )}
+                                {(o.status === 'cancelled' || o.status === 'rejected') && (
+                                  <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => retryOrder(o, position.id)}>
+                                    <RotateCw className="h-3 w-3 mr-1" /> Retry
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                        {(!ordersByPosition[position.id] || (ordersByPosition[position.id]?.orders || []).length === 0) && (
+                          <div className="text-muted-foreground">No recent orders</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
           </div>
         )}
       </CardContent>

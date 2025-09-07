@@ -117,13 +117,15 @@ function PlaceBetForm({
   const fetchWalletBalance = useCallback(async () => {
     try {
       setIsLoadingBalance(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/wallet/balance/usdc`);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      const response = await fetch(`${apiUrl}/wallet/balance/usdc`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Failed to fetch wallet balance');
       const { balance: usdcBalance } = await response.json();
+      const numeric = typeof usdcBalance === 'string' ? parseFloat(usdcBalance) : usdcBalance;
       
       // Update global state
-      updateState({ balance: parseFloat(usdcBalance) });
-      return parseFloat(usdcBalance);
+      updateState({ balance: Number.isFinite(numeric) ? numeric : 0 });
+      return Number.isFinite(numeric) ? numeric : 0;
     } catch (error) {
       console.error('Error fetching wallet balance:', error);
       toast.error('Failed to load wallet balance');
