@@ -14,12 +14,12 @@ function OutcomesCard({ market }: OutcomesCardProps) {
   const [selectedOutcome, setSelectedOutcome] = useState<Outcome | null>(null);
   const [showBetForm, setShowBetForm] = useState(false);
   
-  const outcomes = market?.outcomes || [];
   const sortedOutcomes = useMemo(() => {
-    return [...outcomes].sort((a, b) => {
+    const base = market?.outcomes ?? [];
+    return [...base].sort((a, b) => {
       return (b.current_price ?? b.probability) - (a.current_price ?? a.probability);
     });
-  }, [outcomes]);
+  }, [market]);
   
   const handleBuyClick = (outcome: Outcome) => {
     setSelectedOutcome(outcome);

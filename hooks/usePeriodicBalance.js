@@ -13,18 +13,20 @@ export function usePeriodicBalance(intervalMs = 30000, enabled = true) {
 
   const fetchBalance = useCallback(async () => {
     try {
+      // Ensure consistent API base. Expect NEXT_PUBLIC_API_URL to include '/api/v1'.
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
-      const response = await fetch(
-        `${apiUrl}/wallet/balance/usdc`
-      )
+      const res = await fetch(`${apiUrl}/wallet/balance/usdc`, { cache: 'no-store' })
 
-      if (!response.ok) {
-        console.warn('Failed to fetch wallet balance:', response.statusText)
+      if (!res.ok) {
+        console.warn('Failed to fetch wallet balance:', res.status, await res.text().catch(() => res.statusText))
         return
       }
 
-      const data = await response.json()
-      updateState({ balance: data.balance })
+      const data = await res.json()
+      const numericBalance = typeof data?.balance === 'string' ? parseFloat(data.balance) : data?.balance
+      if (Number.isFinite(numericBalance)) {
+        updateState({ balance: numericBalance })
+      }
     } catch (error) {
       console.error('Error fetching wallet balance:', error)
     }

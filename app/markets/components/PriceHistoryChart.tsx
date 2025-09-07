@@ -38,16 +38,15 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({
   highlightOutcomeId,
   showOnlyHighlighted = false 
 }) => {
-  if (!data || !data.outcomes || Object.keys(data.outcomes).length === 0) {
-    return <p className="text-gray-500">No price history available to chart.</p>;
-  }
+  const hasData = !!(data && data.outcomes && Object.keys(data.outcomes).length > 0);
 
-  // Filter outcomes if showOnlyHighlighted is true and we have a highlightOutcomeId
+  // Filter outcomes (always call hooks, handle empty data safely)
   const filteredOutcomes = useMemo(() => {
+    const base = data?.outcomes ?? {};
     if (showOnlyHighlighted && highlightOutcomeId) {
       const idStr = highlightOutcomeId.toString();
       return Object.fromEntries(
-        Object.entries(data.outcomes).filter(([key, outcome]) =>
+        Object.entries(base).filter(([key, outcome]) =>
           key === idStr ||
           outcome.name === idStr ||
           key.toLowerCase() === idStr.toLowerCase() ||
@@ -55,34 +54,35 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({
         )
       );
     }
-    return data.outcomes;
-  }, [data.outcomes, highlightOutcomeId, showOnlyHighlighted]);
+    return base;
+  }, [data, highlightOutcomeId, showOnlyHighlighted]);
 
-  // We need to transform the data into a format that recharts can easily use.
-  // The goal is an array of objects, where each object represents a point in time
-  // and has a key for each outcome's price at that time.
-
+  // Transform to recharts-friendly series
   const chartData: ChartDataPoint[] = useMemo(() => {
-    // Pre-index each outcome's prices by ISO timestamp for O(1) lookup
     const indexByOutcome: Record<string, Record<string, number>> = {};
     const allTimestamps = new Set<string>();
-    Object.values(filteredOutcomes).forEach(outcome => {
+    Object.values(filteredOutcomes).forEach((outcome) => {
       const map: Record<string, number> = {};
-      outcome.prices.forEach(p => {
+      outcome.prices.forEach((p) => {
         const t = new Date(p.timestamp).toISOString();
         allTimestamps.add(t);
-        // @ts-ignore
-        if (p && typeof p.price === 'number') {
-          // @ts-ignore
-          map[t] = p.price;
+        const val = (typeof (p as any).price === 'number')
+          ? (p as any).price
+          : (typeof (p as any).average === 'number')
+            ? (p as any).average
+            : (typeof (p as any).close === 'number')
+              ? (p as any).close
+              : null;
+        if (val !== null) {
+          map[t] = val;
         }
       });
       indexByOutcome[outcome.name] = map;
     });
     const sortedTimestamps = Array.from(allTimestamps).sort();
-    return sortedTimestamps.map(timestamp => {
+    return sortedTimestamps.map((timestamp) => {
       const dataPoint: ChartDataPoint = { timestamp };
-      Object.values(filteredOutcomes).forEach(outcome => {
+      Object.values(filteredOutcomes).forEach((outcome) => {
         const val = indexByOutcome[outcome.name]?.[timestamp] ?? null;
         dataPoint[outcome.name] = val as number | null;
       });
@@ -90,14 +90,23 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({
     });
   }, [filteredOutcomes]);
 
-  const outcomes = useMemo(() => Object.entries(filteredOutcomes).map(([id, outcome]) => {
-    const idStr = highlightOutcomeId?.toString();
-    const isHighlighted = id === idStr ||
-      outcome.name === idStr ||
-      id.toLowerCase() === idStr?.toLowerCase() ||
-      outcome.name?.toLowerCase() === idStr?.toLowerCase();
-    return { id, name: outcome.name, isHighlighted };
-  }), [filteredOutcomes, highlightOutcomeId]);
+  const outcomes = useMemo(
+    () =>
+      Object.entries(filteredOutcomes).map(([id, outcome]) => {
+        const idStr = highlightOutcomeId?.toString();
+        const isHighlighted =
+          id === idStr ||
+          outcome.name === idStr ||
+          id.toLowerCase() === idStr?.toLowerCase() ||
+          outcome.name?.toLowerCase() === idStr?.toLowerCase();
+        return { id, name: outcome.name, isHighlighted };
+      }),
+    [filteredOutcomes, highlightOutcomeId]
+  );
+
+  if (!hasData) {
+    return <p className="text-gray-500">No price history available to chart.</p>;
+  }
 
   return (
     <ResponsiveContainer width="100%" height={400}>

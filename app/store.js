@@ -30,7 +30,7 @@ export const StateProvider = ({ children }) => {
   // Calculate portfolio value based on current state
   const calculatePortfolioValue = useCallback((currentState) => {
     const { balance, mergedPositions, currentPrices } = currentState;
-    
+
     if (!Array.isArray(mergedPositions) || mergedPositions.length === 0) {
       return balance || 0;
     }
@@ -38,22 +38,27 @@ export const StateProvider = ({ children }) => {
     // Ensure currentPrices is always a Map
     const pricesMap = currentPrices instanceof Map ? currentPrices : new Map();
 
-    // Filter for actual open positions (not resolved/lost)
-    const openPositions = mergedPositions.filter(position => {
-      const currentPrice = pricesMap.get(position.outcome_id) || getCurrentPrice(position);
+    // Treat any resolved or redeemed positions as not contributing to open value
+    const openPositions = mergedPositions.filter((position) => {
+      const marketStatus = position?.market?.status;
+      const resolvedStatus = position?.resolved_status;
+      const isRedeemed = Array.isArray(position?.redemptions) && position.redemptions.some(r => r?.status === 'completed');
+
+      // Consider resolved if won/lost or market closed/resolved
+      const isResolved = resolvedStatus === 'won' || resolvedStatus === 'lost' || marketStatus === 'closed' || marketStatus === 'resolved';
+      if (isResolved || isRedeemed) return false;
+
+      // Only include active filled/open positions with non-zero value
+      const currentPrice = pricesMap.get(position.outcome_id) ?? getCurrentPrice(position);
       const currentValue = position.size && currentPrice ? position.size * currentPrice : Number(position?.currentValue ?? position?.current_value ?? 0);
-      const isResolved = position?.resolved_status === 'lost' || position?.market?.status === 'closed';
-      const hasZeroValue = currentValue === 0 || (currentPrice !== undefined && Number(currentPrice) === 0);
-      
-      // Position is open if it's not resolved and has value
-      return !isResolved && !hasZeroValue && position.status === 'filled';
+      const hasZeroValue = !Number.isFinite(currentValue) || Number(currentValue) === 0;
+      return position?.status === 'filled' && !hasZeroValue;
     });
 
-    // Calculate total value of open positions
     const totalOpenPositionsValue = openPositions.reduce((total, position) => {
-      const currentPrice = pricesMap.get(position.outcome_id) || getCurrentPrice(position);
+      const currentPrice = pricesMap.get(position.outcome_id) ?? getCurrentPrice(position);
       const currentValue = position.size && currentPrice ? position.size * currentPrice : Number(position?.currentValue ?? position?.current_value ?? 0);
-      return total + currentValue;
+      return total + (Number.isFinite(currentValue) ? currentValue : 0);
     }, 0);
 
     // Total portfolio value = USDC balance + open positions value
