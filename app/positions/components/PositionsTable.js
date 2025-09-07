@@ -316,7 +316,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                     <div className="lg:col-span-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="font-medium text-sm truncate mb-1" title={position.market?.question}>
+                          <div className="font-medium text-sm mb-1" title={position.market?.question}>
                             {position.market?.question || 'Unknown Market'}
                           </div>
                           <div className="text-sm text-muted-foreground mb-1">
