@@ -17,15 +17,8 @@ const initialState = {
 };
 
 export const StateProvider = ({ children }) => {
-  console.log('initial state', initialState);
-  // Initialize state with localStorage if available
-  const [state, setState] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedState = localStorage.getItem('appState');
-      return savedState ? JSON.parse(savedState) : initialState;
-    }
-    return initialState;
-  });
+  // Use in-memory state only (no localStorage hydration to avoid stale reverts)
+  const [state, setState] = useState(initialState);
 
   // Calculate portfolio value based on current state
   const calculatePortfolioValue = useCallback((currentState) => {
@@ -65,12 +58,7 @@ export const StateProvider = ({ children }) => {
     return (balance || 0) + totalOpenPositionsValue;
   }, []);
 
-  // Persist state to localStorage whenever it changes
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('appState', JSON.stringify(state));
-    }
-  }, [state]);
+  // Note: intentionally not persisting to localStorage to prevent stale rehydration
 
   // Update state function
   const updateState = useCallback((newState) => {

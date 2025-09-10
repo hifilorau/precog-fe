@@ -23,6 +23,35 @@ import { usePeriodicBalance } from '@/hooks/usePeriodicBalance'
 import { useStateContext } from '@/app/store'
 import PositionsTableSkeleton from './PositionsTableSkeleton'
 
+// Helpers to dedupe overlapping/duplicate positions (backend sometimes returns near-duplicates)
+const canonicalKey = (p) => {
+  return (
+    p?.id ||
+    `${p?.market?.slug || p?.slug || p?.market?.id || 'm'}|${p?.outcome_id ?? p?.outcomeIndex ?? p?.outcome?.id ?? p?.outcome}`
+  )
+}
+const getUpdatedTime = (p) => {
+  const t = p?.updated_at || p?.created_at
+  const n = t ? Date.parse(t) : 0
+  return Number.isFinite(n) ? n : 0
+}
+export const dedupePositions = (list) => {
+  const map = new Map()
+  for (const p of Array.isArray(list) ? list : []) {
+    const key = canonicalKey(p)
+    const prev = map.get(key)
+    if (!prev) {
+      map.set(key, p)
+      continue
+    }
+    // Prefer the more recently updated entry
+    if (getUpdatedTime(p) >= getUpdatedTime(prev)) {
+      map.set(key, p)
+    }
+  }
+  return Array.from(map.values())
+}
+
 export default function PositionsTable({ refreshTrigger = 0 }) {
   const [sellingPosition, setSellingPosition] = useState(null)
   const [cancelingPosition, setCancelingPosition] = useState(null)
@@ -36,14 +65,16 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
   // Orders/expansion state
   const [expanded, setExpanded] = useState({}) // { [positionId]: boolean }
   const [ordersByPosition, setOrdersByPosition] = useState({}) // { [positionId]: { orders: Order[], fetchedAt: number, loading?: boolean, error?: string } }
-  const { mergedPositions, updateState } = useStateContext()
+  const { mergedPositions, updateState, currentPrices: currentPricesInState } = useStateContext()
   
   // Real-time price context
+  const dedupedPositions = React.useMemo(() => dedupePositions(mergedPositions), [mergedPositions])
+
   const {
     currentPrices,
     loading: pricesLoading,
     refreshPrices,
-  } = useRealTimePrices(mergedPositions, 'positions', 'position')
+  } = useRealTimePrices(dedupedPositions, 'positions', 'position')
   
   // Periodic balance refresh (every 30 seconds)
   usePeriodicBalance(30000, true)
@@ -205,8 +236,9 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
     return null
   }
 
+
   // Derive positions to show with a strict filter on zero-value closed/resolved-lost
-  const allPositions = Array.isArray(mergedPositions) ? mergedPositions : []
+  const allPositions = dedupedPositions
   // TODO: add a UI toggle to include closed/lost zero-value positions
   const shouldHidePosition = (p) => {
     const cp = Number(getCurrentPrice(p))
@@ -251,7 +283,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
         console.log('Fetched Fresh Merged Positions Data:', mergedData)
         if (!isMounted) return
 
-        const positions = Array.isArray(mergedData) ? mergedData : []
+        const positions = Array.isArray(mergedData) ? dedupePositions(mergedData) : []
         // Update global state with fresh positions
         updateState({ mergedPositions: positions })
       } catch (err) {
@@ -268,10 +300,12 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshTrigger, updateState]) // mergedPositions intentionally excluded to prevent infinite loop
 
-  // Update global state with current prices when they change
+  // Update global state with current prices when they change (avoid redundant updates)
   useEffect(() => {
-    updateState({ currentPrices })
-  }, [currentPrices, updateState])
+    if (currentPrices !== currentPricesInState) {
+      updateState({ currentPrices })
+    }
+  }, [currentPrices, currentPricesInState, updateState])
 
 
 
@@ -363,7 +397,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
     const fetchPositionsData = async () => {
       try {
         const mergedData = await fetchMergedPositions()
-        const positions = Array.isArray(mergedData) ? mergedData : []
+        const positions = Array.isArray(mergedData) ? dedupePositions(mergedData) : []
         updateState({ mergedPositions: positions })
       } catch (err) {
         console.error('Error fetching positions after edit:', err)
@@ -387,7 +421,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
     const fetchPositionsData = async () => {
       try {
         const mergedData = await fetchMergedPositions()
-        const positions = Array.isArray(mergedData) ? mergedData : []
+        const positions = Array.isArray(mergedData) ? dedupePositions(mergedData) : []
         updateState({ mergedPositions: positions })
       } catch (err) {
         console.error('Error fetching positions after buy:', err)
@@ -460,10 +494,11 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
               );
 
               const rowKey =
-                position.clob_id ||
-                position.asset ||
-                position.id ||
-                `${position.slug || position.market?.slug || 'row'}:${position.outcomeIndex ?? position.outcome?.id ?? position.outcome ?? ''}`
+                    position.id ||
+                    position.clob_id ||
+                    position.asset ||
+                    `${position.slug || position.market?.slug || 'row'}:${position.outcomeIndex ?? position.outcome?.id ?? 
+                position.outcome ?? ''}`
 
               const outcomeLabel =
                 typeof position.outcome === 'string'
