@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useCallback } from 'react'
+import apiFetch from '@/lib/apiFetch'
 import { useStateContext } from '@/app/store'
 
 /**
@@ -15,7 +16,7 @@ export function usePeriodicBalance(intervalMs = 30000, enabled = true) {
     try {
       // Ensure consistent API base. Expect NEXT_PUBLIC_API_URL to include '/api/v1'.
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
-      const res = await fetch(`${apiUrl}/wallet/balance/usdc`, { cache: 'no-store' })
+      const res = await apiFetch(`${apiUrl}/wallet/balance/usdc`)
 
       if (!res.ok) {
         console.warn('Failed to fetch wallet balance:', res.status, await res.text().catch(() => res.statusText))

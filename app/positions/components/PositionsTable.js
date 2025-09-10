@@ -22,6 +22,7 @@ import { useRealTimePrices } from '@/hooks/useRealTimePrices'
 import { usePeriodicBalance } from '@/hooks/usePeriodicBalance'
 import { useStateContext } from '@/app/store'
 import PositionsTableSkeleton from './PositionsTableSkeleton'
+import apiFetch from '@/lib/apiFetch'
 
 // Helpers to dedupe overlapping/duplicate positions (backend sometimes returns near-duplicates)
 const canonicalKey = (p) => {
@@ -101,8 +102,9 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
         return cached.orders
       }
 
-      const url = `${API_URL}/orders?position_id=${encodeURIComponent(positionId)}`
-      const res = await fetch(url, { cache: 'no-store' })
+      const base = API_URL.replace(/\/?$/, '/')
+      const url = `${base}orders/?position_id=${encodeURIComponent(positionId)}`
+      const res = await apiFetch(url)
       if (!res.ok) {
         const detail = await res.text().catch(() => res.statusText)
         throw new Error(detail || `Failed to load orders (${res.status})`)

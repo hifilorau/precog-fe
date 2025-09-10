@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useStateContext } from '../store';
+import apiFetch from '@/lib/apiFetch';
 
 export default function WalletBalance() {
   const [loading, setLoading] = useState(true);
@@ -13,7 +14,7 @@ export default function WalletBalance() {
       try {
         setLoading(true);
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-        const response = await fetch(
+        const response = await apiFetch(
           `${apiUrl}/wallet/balance/usdc`
         );
 

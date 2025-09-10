@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, TrendingUp, Shield, Target, Sparkles, BookOpen, ArrowDown, ArrowUp, Wallet } from 'lucide-react'
 import { useStateContext } from '@/app/store'
 import { toast } from 'sonner'
+import apiFetch from '@/lib/apiFetch'
 import { useRealTimePrices } from '@/hooks/useRealTimePrices'
 
 // Helper function to calculate number of shares based on balance and price
@@ -118,7 +119,7 @@ function PlaceBetForm({
     try {
       setIsLoadingBalance(true);
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-      const response = await fetch(`${apiUrl}/wallet/balance/usdc`, { cache: 'no-store' });
+      const response = await apiFetch(`${apiUrl}/wallet/balance/usdc`);
       if (!response.ok) throw new Error('Failed to fetch wallet balance');
       const { balance: usdcBalance } = await response.json();
       const numeric = typeof usdcBalance === 'string' ? parseFloat(usdcBalance) : usdcBalance;
