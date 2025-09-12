@@ -45,7 +45,9 @@ export const StateProvider = ({ children }) => {
       const currentPrice = pricesMap.get(position.outcome_id) ?? getCurrentPrice(position);
       const currentValue = position.size && currentPrice ? position.size * currentPrice : Number(position?.currentValue ?? position?.current_value ?? 0);
       const hasZeroValue = !Number.isFinite(currentValue) || Number(currentValue) === 0;
-      return position?.status === 'filled' && !hasZeroValue;
+      const status = String(position?.status || '').toLowerCase();
+      const includeByStatus = status === 'filled' || status === 'partially_filled' || status === 'open' || status === 'holding' || status === 'active';
+      return includeByStatus && !hasZeroValue;
     });
 
     const totalOpenPositionsValue = openPositions.reduce((total, position) => {

@@ -202,7 +202,8 @@ function PlaceBetForm({
   const autoFillPrices = async () => {
     // Ensure we have historical stats if user asks for auto-fill
     await ensurePriceHistoryLoaded();
-    const currentPricePercent = (outcome.probability * 100).toFixed(2)
+    const live = currentPrices.get(outcome?.id) ?? outcome?.current_price ?? outcome?.probability ?? 0.5
+    const currentPricePercent = (live * 100).toFixed(2)
     const currentPrice = parseFloat(currentPricePercent)
     
     // Intelligent price suggestions based on order book data
@@ -388,7 +389,8 @@ function PlaceBetForm({
 
   // Suggested price values based on current price, historical data and order book data
   const getSuggestions = (field) => {
-    const currentPricePercent = (outcome.probability * 100).toFixed(2)
+    const live = currentPrices.get(outcome?.id) ?? outcome?.current_price ?? outcome?.probability ?? 0.5
+    const currentPricePercent = (live * 100).toFixed(2)
     const currentPrice = parseFloat(currentPricePercent)
     
     // Price stats from historical data (converted to percentages)
@@ -521,7 +523,12 @@ function PlaceBetForm({
     // no explicit abort on unmount; single-shot fetch guarded by ref
   }, [market?.id, outcome?.id, outcome?.probability]);
   
-  const currentPrice = outcome.probability || 0.5
+  // Live price for display and suggestions: prefer hook, fall back to props
+  const currentPrice = useMemo(() => (
+    (outcome?.id && currentPrices.get(outcome.id) !== undefined)
+      ? currentPrices.get(outcome.id)
+      : (outcome?.current_price ?? outcome?.probability ?? 0.5)
+  ), [currentPrices, outcome?.id, outcome?.current_price, outcome?.probability])
 
   // Memoized PnL previews for UI labels
   const potentialGain = useMemo(() => (

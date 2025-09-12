@@ -31,7 +31,9 @@ export default function StatsCards({ mergedPositions = [] }) {
       const hasZeroValue = currentValue === 0 || (currentPrice !== undefined && Number(currentPrice) === 0)
       
       // Position is open if it's not resolved and has value
-      return !isResolved && !hasZeroValue && position.status === 'filled'
+      const status = String(position?.status || '').toLowerCase()
+      const includeByStatus = status === 'filled' || status === 'partially_filled' || status === 'open' || status === 'holding' || status === 'active'
+      return !isResolved && !hasZeroValue && includeByStatus
     })
 
     // Calculate total value of open positions

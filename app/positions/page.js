@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, RefreshCw } from 'lucide-react'
+import { Plus, RefreshCw, RotateCw, Loader2 } from 'lucide-react'
 import { AllowanceProvider } from '@/hooks/useAllowances'
 import PositionsTable from './components/PositionsTable'
 import PlaceBetForm from './components/PlaceBetForm'
@@ -11,10 +11,13 @@ import PositionDetails from './components/PositionDetails'
 import StatsCards from './components/StatsCards'
 import useUserPositions from '@/hooks/useUserPositions'
 import { useStateContext } from '@/app/store'
+import apiFetch from '@/lib/apiFetch'
+import { toast } from 'sonner'
 
 function PositionsPageContent() {
   const [showPlaceBetForm, setShowPlaceBetForm] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [isBackfilling, setIsBackfilling] = useState(false)
   const [selectedMarket] = useState(null)
   const [selectedOutcome] = useState(null)
   const [selectedPositionId, setSelectedPositionId] = useState(null)
@@ -31,6 +34,46 @@ function PositionsPageContent() {
 
   const handleRefresh = () => {
     setRefreshTrigger(prev => prev + 1)
+  }
+
+  const handleBackfill = async () => {
+    try {
+      setIsBackfilling(true)
+      const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/?$/, '/');
+      const tryUrls = [
+        `${base}positions/backfill`,
+        `${base}positions/backfill/`,
+      ];
+
+      let res;
+      for (const url of tryUrls) {
+        res = await apiFetch(url, { method: 'POST' });
+        if (res.ok) break;
+      }
+
+      if (!res || !res.ok) {
+        const txt = res ? (await res.text().catch(() => res.statusText)) : 'No response';
+        throw new Error(txt || 'Backfill failed');
+      }
+
+      const summary = await res.json().catch(() => ({}));
+      // Best-effort surface of counts
+      const createdPositions = summary.created_positions ?? summary.positions_created ?? summary.positions?.created ?? summary.created ?? 0;
+      const createdOrders = summary.created_orders ?? summary.orders_created ?? summary.orders?.created ?? 0;
+      const createdFills = summary.created_fills ?? summary.fills_created ?? summary.fills?.created ?? 0;
+      const updated = summary.updated ?? summary.updates ?? 0;
+
+      toast.success(`Backfill complete: +${createdPositions} positions, +${createdOrders} orders, +${createdFills} fills, ${updated} updates`);
+      console.log('Backfill summary:', summary);
+
+      // Refresh positions so UI reflects DB-backed entries
+      setRefreshTrigger(prev => prev + 1)
+    } catch (e) {
+      console.error('Backfill error:', e)
+      toast.error(e?.message || 'Backfill failed')
+    } finally {
+      setIsBackfilling(false)
+    }
   }
 
   // Call the hook at the top level of the component
@@ -107,6 +150,19 @@ function PositionsPageContent() {
         </div>
         
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleBackfill}
+            disabled={isBackfilling}
+            className="flex items-center gap-2"
+          >
+            {isBackfilling ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RotateCw className="h-4 w-4" />
+            )}
+            Backfill
+          </Button>
           <Button
             variant="outline"
             onClick={handleRefresh}
