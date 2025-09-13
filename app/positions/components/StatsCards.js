@@ -74,18 +74,6 @@ export default function StatsCards({ mergedPositions = [] }) {
     })}`
   }
 
-  const formatPnLWithSign = (amount) => {
-    if (amount == null || isNaN(amount)) return '$0.00'
-    const isPositive = amount >= 0
-    const formatted = formatCurrency(amount)
-    return isPositive ? `+${formatted}` : `-${formatted}`
-  }
-
-  const getPnLColor = (amount) => {
-    if (amount == null || isNaN(amount) || amount === 0) return 'text-gray-600'
-    return amount >= 0 ? 'text-green-600' : 'text-red-600'
-  }
-
   return (
     <Card>
       <CardHeader className="pb-2 flex flex-row items-center justify-between">

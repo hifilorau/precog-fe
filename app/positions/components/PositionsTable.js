@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock, Edit, Plus, Minus, Info, ChevronRight, ChevronDown, Copy, XCircle, RotateCw, MoreVertical } from 'lucide-react'
+import { DollarSign, Loader2, RefreshCw, Target, Shield, Edit, Plus, ChevronRight, ChevronDown, Copy, XCircle, RotateCw, MoreVertical } from 'lucide-react'
 import EditPositionModal from './EditPositionModal'
 import QuickBetModal from './QuickBetModal'
 
@@ -16,7 +16,6 @@ import {
   getCurrentPrice,
   getStatusBadge,
   getStopLossRiskLevel,
-  formatPnL,
 } from '@/app/utils/formatters'
 import { useRealTimePrices } from '@/hooks/useRealTimePrices'
 import { useStateContext } from '@/app/store'
@@ -96,8 +95,6 @@ export const dedupePositions = (list) => {
 }
 
 export default function PositionsTable({ refreshTrigger = 0 }) {
-  const [sellingPosition, setSellingPosition] = useState(null)
-  const [cancelingPosition, setCancelingPosition] = useState(null)
   const [redeemingPosition, setRedeemingPosition] = useState(null)
   const [error, setError] = useState('')
   const [isLoadingPositions, setIsLoadingPositions] = useState(false)
@@ -379,7 +376,6 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
 
   // Add minimal handler stubs to avoid reference errors
   const handleSellPosition = async (position) => {
-    setSellingPosition(position.id);
     try {
       console.log('Sell position requested:', position.id);
       
@@ -408,21 +404,16 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
     } catch (error) {
       console.error('Sell failed:', error);
       toast.error(error.message || 'Failed to sell position');
-    } finally {
-      setSellingPosition(null);
     }
   }
 
   const handleCancelOrder = async (positionId) => {
-    setCancelingPosition(positionId)
     try {
       console.log('Cancel order requested:', positionId)
       // TODO: implement cancel API call
     } catch (e) {
       console.error('Cancel failed:', e)
       setError('Failed to cancel order')
-    } finally {
-      setCancelingPosition(null)
     }
   }
 
