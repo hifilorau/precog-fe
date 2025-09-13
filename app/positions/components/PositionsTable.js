@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock, Edit, Plus, Minus, Info, ChevronRight, ChevronDown, Copy, XCircle, RotateCw } from 'lucide-react'
+import { DollarSign, Loader2, RefreshCw, Target, Shield, Clock, Edit, Plus, Minus, Info, ChevronRight, ChevronDown, Copy, XCircle, RotateCw, MoreVertical } from 'lucide-react'
 import EditPositionModal from './EditPositionModal'
 import QuickBetModal from './QuickBetModal'
 
@@ -19,10 +19,52 @@ import {
   formatPnL,
 } from '@/app/utils/formatters'
 import { useRealTimePrices } from '@/hooks/useRealTimePrices'
-import { usePeriodicBalance } from '@/hooks/usePeriodicBalance'
 import { useStateContext } from '@/app/store'
 import PositionsTableSkeleton from './PositionsTableSkeleton'
 import apiFetch from '@/lib/apiFetch'
+
+// Small inline donut chart to visualize equity capture
+function EquityDonut({ percent = 0, amount = 0, size = 64, strokeWidth = 6 }) {
+  const p = Math.max(0, Math.min(100, Number(percent) || 0))
+  const s = Number(size) || 56
+  const sw = Number(strokeWidth) || 6
+  const r = (s - sw) / 2
+  const c = 2 * Math.PI * r
+  const offset = c * (1 - p / 100)
+  const x = s / 2
+  const y = s / 2
+
+  const formatAmount = (v) => {
+    const n = Number(v) || 0
+    if (Math.abs(n) >= 1000) {
+      return `$${(n / 1000).toFixed(1)}k`
+    }
+    return `$${n.toFixed(0)}`
+  }
+
+  return (
+    <div className="flex flex-col items-center" title={`Equity captured: ${Math.round(p)}%`}>
+      <svg width={s} height={s} className="block">
+        <circle cx={x} cy={y} r={r} stroke="#e5e7eb" strokeWidth={sw} fill="none" />
+        <circle
+          cx={x}
+          cy={y}
+          r={r}
+          stroke="#16a34a"
+          strokeWidth={sw}
+          fill="none"
+          strokeDasharray={`${c} ${c}`}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${x} ${y})`}
+        />
+        <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fontSize="14" fontWeight="600" fill="#16a34a">
+          {formatAmount(amount)}
+        </text>
+      </svg>
+    </div>
+  )
+}
 
 // Helpers to dedupe overlapping/duplicate positions (backend sometimes returns near-duplicates)
 const canonicalKey = (p) => {
@@ -63,10 +105,15 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
   const [showEditModal, setShowEditModal] = useState(false)
   const [buyMorePosition, setBuyMorePosition] = useState(null)
   const [showBuyMoreModal, setShowBuyMoreModal] = useState(false)
+  const [menuOpenFor, setMenuOpenFor] = useState(null)
   // Orders/expansion state
   const [expanded, setExpanded] = useState({}) // { [positionId]: boolean }
   const [ordersByPosition, setOrdersByPosition] = useState({}) // { [positionId]: { orders: Order[], fetchedAt: number, loading?: boolean, error?: string } }
   const { mergedPositions, updateState, currentPrices: currentPricesInState } = useStateContext()
+  // Sorting & filtering state
+  const [filterMode, setFilterMode] = useState('holding') // 'holding' | 'all'
+  const [sortKey, setSortKey] = useState('value') // 'value' | 'closes'
+  const [sortDir, setSortDir] = useState('desc') // 'asc' | 'desc'
   
   // Real-time price context
   const dedupedPositions = React.useMemo(() => dedupePositions(mergedPositions), [mergedPositions])
@@ -77,8 +124,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
     refreshPrices,
   } = useRealTimePrices(dedupedPositions, 'positions', 'position')
   
-  // Periodic balance refresh (every 30 seconds)
-  usePeriodicBalance(30000, true)
+  // Wallet balance is now refreshed globally in ClientLayout
 
   // Helpers for orders API
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
@@ -239,18 +285,38 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
   }
 
 
-  // Derive positions to show with a strict filter on zero-value closed/resolved-lost
-  const allPositions = dedupedPositions
-  // TODO: add a UI toggle to include closed/lost zero-value positions
-  const shouldHidePosition = (p) => {
-    const cp = Number(getCurrentPrice(p))
-    const hasZeroPrice = !Number.isNaN(cp) && cp === 0
-    const hasZeroValue = Number(p?.currentValue ?? p?.current_value) === 0
-    const isClosed = p?.market?.status === 'closed'
-    const isResolvedLost = p?.resolved_status === 'lost' || isClosed
-    return (hasZeroPrice || hasZeroValue) && isResolvedLost
-  }
-  const positionsToShow = allPositions.filter(p => !shouldHidePosition(p))
+  // Enrich, filter, and sort positions for display
+  const displayPositions = React.useMemo(() => {
+    const enriched = dedupedPositions.map(p => {
+      const cp = currentPrices.get(p.outcome_id) || getCurrentPrice(p)
+      const currentValue = Number(p?.currentValue ?? (p.size && cp ? p.size * cp : 0))
+      const closesTs = p?.market?.endDate ? Date.parse(p.market.endDate) : Number.POSITIVE_INFINITY
+      return { p, cp: Number(cp ?? 0), currentValue, closesTs }
+    })
+
+    const filtered = enriched.filter(({ p, currentValue }) => {
+      if (filterMode === 'holding') {
+        const shares = Number(p.size ?? 0)
+        return shares > 0 && Number(currentValue) > 0
+      }
+      return true // 'all'
+    })
+
+    const sorted = filtered.sort((a, b) => {
+      let av, bv
+      if (sortKey === 'closes') {
+        av = a.closesTs
+        bv = b.closesTs
+      } else {
+        av = a.currentValue
+        bv = b.currentValue
+      }
+      const cmp = (av === bv) ? 0 : (av < bv ? -1 : 1)
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+
+    return sorted
+  }, [dedupedPositions, currentPrices, filterMode, sortKey, sortDir])
 
 
   // Fetch merged positions from backend
@@ -454,20 +520,52 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
           <DollarSign className="h-5 w-5" />
           Open Positions
         </CardTitle>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={refreshPrices}
-          disabled={pricesLoading}
-          className="flex items-center gap-1"
-        >
-          {pricesLoading ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3 w-3" />
-          )}
-          Refresh Prices
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 text-xs">
+            <label className="text-muted-foreground">Filter</label>
+            <select
+              className="border rounded px-2 py-1 text-xs bg-white"
+              value={filterMode}
+              onChange={(e) => setFilterMode(e.target.value)}
+            >
+              <option value="holding">Holding</option>
+              <option value="all">All</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-1 text-xs">
+            <label className="text-muted-foreground">Sort</label>
+            <select
+              className="border rounded px-2 py-1 text-xs bg-white"
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value)}
+            >
+              <option value="value">Value</option>
+              <option value="closes">Closes</option>
+            </select>
+            <select
+              className="border rounded px-2 py-1 text-xs bg-white"
+              value={sortDir}
+              onChange={(e) => setSortDir(e.target.value)}
+            >
+              <option value="desc">Desc</option>
+              <option value="asc">Asc</option>
+            </select>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={refreshPrices}
+            disabled={pricesLoading}
+            className="flex items-center gap-1"
+          >
+            {pricesLoading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+            Refresh Prices
+          </Button>
+        </div>
       </CardHeader>
       
       <CardContent>
@@ -477,7 +575,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
           </Alert>
         )}
 
-        {positionsToShow.length === 0 ? (
+        {displayPositions.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>No positions found</p>
@@ -485,15 +583,11 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
           </div>
         ) : (
           <div className="space-y-4">
-            {positionsToShow.map((position) => {
-              const currentPrice = currentPrices.get(position.outcome_id) || getCurrentPrice(position)
+            {displayPositions.map(({ p: position, cp: currentPrice, currentValue: derivedCurrentValue }) => {
               // Always calculate PnL with real-time prices for accuracy
               const pnlData = calculatePnL(position, currentPrice)
+              const rowRiskLevel = getStopLossRiskLevel(position, currentPrice)
 
-              const derivedCurrentValue = Number(
-                position?.currentValue ??
-                (position.size && currentPrice ? position.size * currentPrice : 0)
-              );
 
               const rowKey =
                     position.id ||
@@ -511,7 +605,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                 <div key={rowKey} className="border border-border rounded-lg p-4 bg-card hover:bg-muted/50 transition-colors">
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
                     {/* Market & Outcome */}
-                    <div className="lg:col-span-3">
+                    <div className="lg:col-span-2">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="font-medium text-sm mb-1" title={position.market?.question}>
@@ -536,39 +630,15 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                             </div>
                           )}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleCopyPositionId(position.id)}
-                          className="p-1 h-6 w-6 ml-2"
-                          title={`Copy Position ID: ${position.id}`}
-                        >
-                          <Info className="h-3 w-3" />
-                        </Button>
-                        {/* Expand/Collapse orders */}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleExpanded(position.id)}
-                          className="p-1 h-6 w-6 ml-1"
-                          title={expanded[position.id] ? 'Hide Orders' : 'Show Orders'}
-                          aria-expanded={!!expanded[position.id]}
-                          aria-controls={`orders-${position.id}`}
-                        >
-                          {expanded[position.id] ? (
-                            <ChevronDown className="h-3 w-3" />
-                          ) : (
-                            <ChevronRight className="h-3 w-3" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
+                        {/* ID and expand controls moved to Actions column */}
+                  </div>
+                </div>
 
                     {/* Status & Close Date */}
-                    <div className="lg:col-span-2">
+                    <div className="lg:col-span-1">
                       <div className="mb-2">{getStatusBadge(position)}</div>
                       {position.market?.endDate ? (
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-xs text-muted-foreground max-w-[200px]">
                           Closes: {new Date(position.market.endDate).toLocaleDateString('en-US', {
                             month: 'short',
                             day: 'numeric'
@@ -579,92 +649,123 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                       )}
                     </div>
 
-                    {/* Prices */}
-                    <div className="lg:col-span-2">
-                      <div className="text-sm space-y-1">
-                        <div className="flex justify-between items-center">
-                          <span className="text-muted-foreground">Entry:</span>
-                          <span className="font-medium">{formatPrice(position.entry_price)}</span>
-                        </div>
-                        <div className={`flex justify-between items-center ${pricesLoading ? 'opacity-70' : ''}`}>
-                          <span className="text-muted-foreground">Current:</span>
-                          {pricesLoading ? (
-                            <div className="flex items-center gap-1">
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                              <span className="font-medium">{formatPrice(position.outcome?.probability)}</span>
+                    {/* Prices + Value/Volume, grouped */}
+                    <div className="lg:col-span-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Prices */}
+                        <div>
+                          <div className="text-sm space-y-1 max-w-[160px]">
+                            <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground">Entry:</span>
+                              <span className="font-medium">{formatPrice(position.entry_price)}</span>
                             </div>
-                          ) : (
-                            <span className="font-medium">{formatPrice(currentPrice)}</span>
-                          )}
+                            <div className={`flex justify-between items-center ${pricesLoading ? 'opacity-70' : ''}`}>
+                              <span className="text-muted-foreground">Current:</span>
+                              {pricesLoading ? (
+                                <div className="flex items-center gap-1">
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                  <span className="font-medium">{formatPrice(position.outcome?.probability)}</span>
+                                </div>
+                              ) : (
+                                <span className="font-medium">{formatPrice(currentPrice)}</span>
+                              )}
                         </div>
                       </div>
-                      {(() => {
-                        const riskLevel = getStopLossRiskLevel(position, currentPrice)
-                        if (riskLevel) {
-                          return (
-                            <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border mt-2 ${riskLevel.color}`}>
-                              {riskLevel.message}
+                    </div>
+
+                        {/* Value & Volume */}
+                        <div>
+                          <div className="text-sm space-y-1 max-w-[160px] whitespace-nowrap">
+                            <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground">Value:</span>
+                              <span className="font-medium">
+                                {derivedCurrentValue != null ? `$${derivedCurrentValue.toFixed(2)}` : '-'}
+                              </span>
                             </div>
-                          )
-                        }
-                        return null
+                            <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground">Volume:</span>
+                              <span className="font-medium text-xs">
+                                {formatVolume(position.volume)}{position.size != null ? ` / ${formatVolume(position.size)}` : ''}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Equity Capture Donut */}
+                    <div className="lg:col-span-1 flex items-center justify-center">
+                      {(() => {
+                        const entry = Number(position.entry_price ?? 0)
+                        const cp = Number(currentPrice ?? position.outcome?.probability ?? 0)
+                        const shares = Number(position.size ?? 0)
+                        const maxProfitPerShare = Math.max(0, 1 - entry)
+                        const realizedPerShare = Math.max(0, cp - entry)
+                        const pctCaptured = maxProfitPerShare > 0 ? Math.max(0, Math.min(1, realizedPerShare / maxProfitPerShare)) * 100 : 0
+                        const remainingDollars = Math.max(0, shares * (1 - cp))
+                        return (
+                          <EquityDonut percent={pctCaptured} amount={remainingDollars} />
+                        )
                       })()}
                     </div>
 
-                    {/* Value & Volume */}
+                    {/* PnL + Exit/SL grouped (two spans, centered) */}
                     <div className="lg:col-span-2">
-                      <div className="text-sm space-y-1">
-                        <div className="flex justify-between items-center">
-                          <span className="text-muted-foreground">Value:</span>
-                          <span className="font-medium">
-                            {derivedCurrentValue != null ? `$${derivedCurrentValue.toFixed(2)}` : '-'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-muted-foreground">Volume:</span>
-                          <span className="font-medium text-xs">
-                            {formatVolume(position.volume)}{position.size != null ? ` / ${formatVolume(position.size)}` : ''}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* PnL */}
-                    <div className="lg:col-span-1">
-                      <div className="text-sm">
-                        <div className="text-muted-foreground mb-1 text-xs">PnL</div>
-                        <div className="font-medium">
-                          {pnlData ? formatPnL(pnlData.pnl, pnlData.pnlPercent) : '-'}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Targets */}
-                    <div className="lg:col-span-1">
-                      <div className="space-y-1 text-xs">
-                        {position.sell_price ? (
-                          <div className="flex items-center gap-1 text-green-600">
-                            <Target className="h-3 w-3" />
-                            <span>{formatPrice(position.sell_price)}</span>
+                      <div className="flex items-start justify-center gap-2">
+                        <div className="w-[60px]">
+                          <div className="text-muted-foreground mb-1 text-xs">Exit/SL</div>
+                          <div className="space-y-1 text-xs whitespace-nowrap">
+                            {position.sell_price ? (
+                              <div className="flex items-center gap-1 text-green-600">
+                                <Target className="h-3 w-3" />
+                                <span>{formatPrice(position.sell_price)}</span>
+                              </div>
+                            ) : (
+                              <div className="text-muted-foreground">No exit</div>
+                            )}
+                            {position.stop_loss_price ? (
+                              <div className="flex items-center gap-1 text-red-600">
+                                <Shield className="h-3 w-3" />
+                                <span>{formatPrice(position.stop_loss_price)}</span>
+                              </div>
+                            ) : (
+                              <div className="text-muted-foreground">No SL</div>
+                            )}
                           </div>
-                        ) : (
-                          <div className="text-muted-foreground">No target</div>
-                        )}
-                        {position.stop_loss_price ? (
-                          <div className="flex items-center gap-1 text-red-600">
-                            <Shield className="h-3 w-3" />
-                            <span>{formatPrice(position.stop_loss_price)}</span>
-                          </div>
-                        ) : (
-                          <div className="text-muted-foreground">No stop</div>
-                        )}
+                        </div>
+                        {/* Inline edit next to Exit/SL */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditPosition(position)}
+                          className="p-1 h-6 w-6"
+                          title="Edit Exit/SL"
+                        >
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                        <div className="w-[60px]">
+                          <div className="text-muted-foreground mb-1 text-xs">PnL</div>
+                          {pnlData ? (
+                            <div className="flex flex-col items-end">
+                              <div className={`${pnlData.pnl >= 0 ? 'text-green-600' : 'text-red-600'} font-medium text-xs`}>
+                                ${Math.abs(pnlData.pnl).toFixed(2)}
+                              </div>
+                              <div className={`${pnlData.pnl >= 0 ? 'text-green-600' : 'text-red-600'} text-xs`}>
+                                {pnlData.pnlPercent >= 0 ? '+' : ''}{pnlData.pnlPercent.toFixed(1)}%
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-xs">-</div>
+                          )}
+                        </div>
                       </div>
                     </div>
 
                     {/* Actions */}
-                    <div className="lg:col-span-1">
-                      <div className="flex items-center gap-1">
-                        {(() => {
+                    <div className="lg:col-span-2">
+                      <div className="flex flex-col items-stretch gap-1 relative">
+                        <div className="flex items-center gap-1 justify-end">
+                          {(() => {
                           // If current value is zero, show Lost status
                           const isLostValue = derivedCurrentValue != null && Number(derivedCurrentValue) === 0
                           if (isLostValue) {
@@ -693,6 +794,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
 
                           // Redeemable positions with non-zero current value -> Claim Winnings
                           const canRedeem = !!position.redeemable && !isLostValue
+                          // Primary action: Claim if redeemable
                           if (canRedeem) {
                             return (
                               <Button
@@ -714,133 +816,53 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                               </Button>
                             );
                           }
-
-                          // Open/filled positions (not resolved) and not data-only -> allow Sell/Edit/Buy
-                          const isFilled = position.status === 'filled'
-                            && (!position.resolved_status || position.resolved_status === '')
-                            && !position.isDataApi
-                          if (isFilled) {
-                            const riskLevel = getStopLossRiskLevel(position, currentPrice);
-                            const isHighRisk = riskLevel && (riskLevel.level === 'crash' || riskLevel.level === 'high');
-                            return (
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleBuyMore(position)}
-                                  disabled={sellingPosition === position.id}
-                                  className="p-1 h-6 w-6"
-                                  title="Buy More"
-                                >
-                                  <Plus className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleEditPosition(position)}
-                                  disabled={sellingPosition === position.id}
-                                  className="p-1 h-6 w-6"
-                                  title="Edit Position"
-                                >
-                                  <Edit className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  variant={isHighRisk ? "destructive" : "outline"}
-                                  size="sm"
-                                  onClick={() => handleSellPosition(position)}
-                                  disabled={sellingPosition === position.id}
-                                  className={`p-1 h-6 w-6 ${isHighRisk ? "animate-pulse" : ""}`}
-                                  title={isHighRisk ? "SELL NOW!" : "Sell Position"}
-                                >
-                                  {sellingPosition === position.id ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <>
-                                      {isHighRisk && <Shield className="h-3 w-3" />}
-                                      {!isHighRisk && <Minus className="h-3 w-3" />}
-                                    </>
-                                  )}
-                                </Button>
-                                {riskLevel && riskLevel.level === 'crash' && (
-                                  <div className="text-xs text-red-600 font-medium ml-1">
-                                    🚨
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          }
-
-                          // Pending: show Pending label and a Cancel button for open positions
-                          if (position.status === 'open' || position.status === 'not_filled') {
-                            return (
-                              <div className="flex items-center gap-1">
-                                <div className="flex items-center gap-1 text-xs text-gray-500">
-                                  <Clock className="h-3 w-3" />
-                                  Pending
-                                </div>
-                                {position.status === 'open' && !position.isDataApi && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleCancelOrder(position.id)}
-                                    disabled={cancelingPosition === position.id}
-                                    className="p-1 h-6 w-6 ml-1"
-                                    title="Cancel Order"
-                                  >
-                                    {cancelingPosition === position.id ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <Minus className="h-3 w-3" />
-                                    )}
-                                  </Button>
-                                )}
-                              </div>
-                            );
-                          }
-
-                          // Already redeemed (explicit)
-                          const hasRedemptionRecord = position.redemptions && position.redemptions.length > 0 && 
-                            position.redemptions.some(r => r.status === 'completed');
-                          if (position.resolved_status === 'won' && hasRedemptionRecord) {
-                            return (
-                              <div className="flex items-center gap-1 text-xs text-green-600">
-                                <DollarSign className="h-3 w-3" />
-                                Redeemed
-                              </div>
-                            );
-                          }
-                          
-                          // Lost positions by resolution (if not captured by value==0)
-                          if (position.resolved_status === 'lost') {
-                            // Check if market is still open for trading
-                            const isMarketOpen = position.market?.status !== 'closed' && position.market?.status !== 'resolved';
-                            
-                            if (isMarketOpen) {
-                              return (
-                                <div className="flex items-center gap-1">
-                                  <div className="text-xs text-red-600">Lost</div>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleBuyMore(position)}
-                                    className="p-1 h-6 w-6 ml-1"
-                                    title="Buy More"
-                                  >
-                                    <Plus className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              );
-                            }
-                            
-                            return (
-                              <div className="text-xs text-red-600">
-                                Lost
-                              </div>
-                            );
-                          }
-
                           return null;
                         })()}
+                        {/* Kebab menu */}
+                        <div className="relative">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setMenuOpenFor(menuOpenFor === position.id ? null : position.id)}
+                            className="p-1 h-6 w-6"
+                            title="More actions"
+                          >
+                            <MoreVertical className="h-3 w-3" />
+                          </Button>
+                          {menuOpenFor === position.id && (
+                            <div className="absolute right-0 mt-1 w-40 bg-white border rounded shadow-md z-10">
+                              <button className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50" onClick={() => { handleBuyMore(position); setMenuOpenFor(null) }}>Buy more</button>
+                              <button className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50" onClick={() => { handleSellPosition(position); setMenuOpenFor(null) }}>Sell</button>
+                              <button className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50" onClick={() => { handleCopyPositionId(position.id); setMenuOpenFor(null) }}>Copy ID</button>
+                              <button className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50" onClick={() => { handleEditPosition(position); setMenuOpenFor(null) }}>Edit prices</button>
+                              {(position.status === 'open' || position.status === 'not_filled') && (
+                                <button className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50" onClick={() => { handleCancelOrder(position.id); setMenuOpenFor(null) }}>Cancel order</button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        {/* Expand/collapse */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleExpanded(position.id)}
+                          className="p-1 h-6 w-6"
+                          title={expanded[position.id] ? 'Hide Orders' : 'Show Orders'}
+                          aria-expanded={!!expanded[position.id]}
+                          aria-controls={`orders-${position.id}`}
+                        >
+                          {expanded[position.id] ? (
+                            <ChevronDown className="h-3 w-3" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3" />
+                          )}
+                        </Button>
+                        </div>
+                        {rowRiskLevel && (
+                          <div className={`inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-medium border mt-1 w-full ${rowRiskLevel.color}`}>
+                            {rowRiskLevel.message}
+                          </div>
+                        )}
                       </div>
                     </div>
                 </div>

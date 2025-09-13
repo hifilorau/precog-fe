@@ -60,14 +60,15 @@ export const getStopLossRiskLevel = (position, currentPrice) => {
   const priceDropFromEntry = (position.entry_price - currentPrice) / position.entry_price;
   const distanceToStopLoss = (currentPrice - position.stop_loss_price) / position.entry_price;
 
+  const concise = `${(priceDropFromEntry * 100).toFixed(1)}% drop`;
   if (priceDropFromEntry >= 0.10) {
-    return { level: 'crash', message: `🚨 CRASH: ${(priceDropFromEntry * 100).toFixed(1)}% drop!`, color: 'bg-red-100 text-red-800 border-red-200' };
+    return { level: 'crash', message: concise, color: 'bg-red-100 text-red-800 border-red-200' };
   }
   if (priceDropFromEntry >= 0.05 || distanceToStopLoss <= 0.02) {
-    return { level: 'high', message: `⚠️ HIGH RISK: ${(priceDropFromEntry * 100).toFixed(1)}% drop`, color: 'bg-orange-100 text-orange-800 border-orange-200' };
+    return { level: 'high', message: concise, color: 'bg-orange-100 text-orange-800 border-orange-200' };
   }
   if (priceDropFromEntry >= 0.02 || distanceToStopLoss <= 0.05) {
-    return { level: 'medium', message: `⚠️ WATCH: ${(priceDropFromEntry * 100).toFixed(1)}% drop`, color: 'bg-yellow-100 text-yellow-800 border-yellow-200' };
+    return { level: 'medium', message: concise, color: 'bg-yellow-100 text-yellow-800 border-yellow-200' };
   }
   return null;
 };

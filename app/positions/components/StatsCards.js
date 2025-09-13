@@ -2,12 +2,14 @@
 
 import React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { DollarSign, TrendingUp, PieChart, Target } from 'lucide-react'
+import { DollarSign, PieChart } from 'lucide-react'
 import { useStateContext } from '@/app/store'
 import { calculatePnL, getCurrentPrice } from '@/app/utils/formatters'
+import SnapshotsCard from './SnapshotsCard'
 
 export default function StatsCards({ mergedPositions = [] }) {
   const { balance: usdcBalance, currentPrices } = useStateContext()
+  const [collapsed, setCollapsed] = React.useState(false)
   
   // Ensure currentPrices is always a Map
   const pricesMap = currentPrices instanceof Map ? currentPrices : new Map()
@@ -85,71 +87,56 @@ export default function StatsCards({ mergedPositions = [] }) {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      {/* Open Positions Card */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-            <Target className="h-4 w-4" />
-            Open Positions
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{stats.openPositionsCount}</div>
-          <p className="text-xs text-gray-500">Active trades</p>
-          <div className="text-sm font-medium text-gray-700 mt-1">
-            {formatCurrency(stats.totalOpenPositionsValue)}
-          </div>
-          <p className="text-xs text-gray-500">Total value</p>
-        </CardContent>
-      </Card>
+    <Card>
+      <CardHeader className="pb-2 flex flex-row items-center justify-between">
+        <CardTitle className="text-sm font-medium text-gray-700">Portfolio Overview</CardTitle>
+        <button
+          onClick={() => setCollapsed(v => !v)}
+          className="text-xs px-2 py-1 rounded border bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+          aria-expanded={!collapsed}
+        >
+          {collapsed ? 'Expand' : 'Collapse'}
+        </button>
+      </CardHeader>
+      <CardContent>
+        {!collapsed && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Portfolio Snapshots Chart (replaces first two cards) */}
+            <SnapshotsCard />
 
-      {/* Total P&L Card */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-            <TrendingUp className="h-4 w-4" />
-            Total P&L
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className={`text-2xl font-bold ${getPnLColor(stats.totalPnL)}`}>
-            {formatPnLWithSign(stats.totalPnL)}
-          </div>
-          <p className="text-xs text-gray-500">All-time gains/losses</p>
-        </CardContent>
-      </Card>
+            {/* USDC Balance Card */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  USDC Balance
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatCurrency(usdcBalance)}</div>
+                <p className="text-xs text-gray-500">Available to trade</p>
+              </CardContent>
+            </Card>
 
-      {/* USDC Balance Card */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-            <DollarSign className="h-4 w-4" />
-            USDC Balance
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{formatCurrency(usdcBalance)}</div>
-          <p className="text-xs text-gray-500">Available to trade</p>
-        </CardContent>
-      </Card>
-
-      {/* Portfolio Value Card */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-            <PieChart className="h-4 w-4" />
-            Portfolio Value
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{formatCurrency(stats.totalPortfolioValue)}</div>
-          <p className="text-xs text-gray-500">USDC + open positions</p>
-          <div className="text-xs text-gray-600 mt-1">
-            {formatCurrency(usdcBalance)} + {formatCurrency(stats.totalOpenPositionsValue)}
+            {/* Portfolio Value Card */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
+                  <PieChart className="h-4 w-4" />
+                  Portfolio Value
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatCurrency(stats.totalPortfolioValue)}</div>
+                <p className="text-xs text-gray-500">USDC + open positions</p>
+                <div className="text-xs text-gray-600 mt-1">
+                  {formatCurrency(usdcBalance)} + {formatCurrency(stats.totalOpenPositionsValue)}
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
