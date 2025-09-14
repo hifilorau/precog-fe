@@ -41,6 +41,10 @@ function EquityDonut({ percent = 0, amount = 0, size = 64, strokeWidth = 6 }) {
     return `$${n.toFixed(0)}`
   }
 
+  const isPositive = Number(amount) >= 0
+  const strokeColor = isPositive ? '#63a483' : '#e08a6b'
+  const textColor = strokeColor
+
   return (
     <div className="flex flex-col items-center" title={`Equity captured: ${Math.round(p)}%`}>
       <svg width={s} height={s} className="block">
@@ -49,7 +53,7 @@ function EquityDonut({ percent = 0, amount = 0, size = 64, strokeWidth = 6 }) {
           cx={x}
           cy={y}
           r={r}
-          stroke="#16a34a"
+          stroke={strokeColor}
           strokeWidth={sw}
           fill="none"
           strokeDasharray={`${c} ${c}`}
@@ -57,8 +61,52 @@ function EquityDonut({ percent = 0, amount = 0, size = 64, strokeWidth = 6 }) {
           strokeLinecap="round"
           transform={`rotate(-90 ${x} ${y})`}
         />
-        <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fontSize="14" fontWeight="600" fill="#16a34a">
+        <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fontSize="14" fontWeight="600" fill={textColor}>
           {formatAmount(amount)}
+        </text>
+      </svg>
+    </div>
+  )
+}
+
+// Donut that visualizes PnL percent with sign-based color and shows the PnL amount in the center
+function PnLDonut({ amount = 0, percent = 0, size = 64, strokeWidth = 6 }) {
+  const s = Number(size) || 56
+  const sw = Number(strokeWidth) || 6
+  const r = (s - sw) / 2
+  const c = 2 * Math.PI * r
+  const x = s / 2
+  const y = s / 2
+
+  const pct = Math.max(0, Math.min(100, Math.abs(Number(percent) || 0)))
+  const offset = c * (1 - pct / 100)
+  const isPositive = Number(amount) >= 0
+  const strokeColor = isPositive ? '#63a483' : '#e08a6b'
+  const text = (() => {
+    const n = Number(amount) || 0
+    const sign = n >= 0 ? '' : '-'
+    const v = Math.abs(n)
+    return `${sign}$${v.toFixed(2)}`
+  })()
+
+  return (
+    <div className="flex flex-col items-center" title={`PnL: ${isPositive ? '+' : '-'}${pct.toFixed(1)}%`}>
+      <svg width={s} height={s} className="block">
+        <circle cx={x} cy={y} r={r} stroke="#e5e7eb" strokeWidth={sw} fill="none" />
+        <circle
+          cx={x}
+          cy={y}
+          r={r}
+          stroke={strokeColor}
+          strokeWidth={sw}
+          fill="none"
+          strokeDasharray={`${c} ${c}`}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${x} ${y})`}
+        />
+        <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fontSize="12" fontWeight="600" fill={strokeColor}>
+          {text}
         </text>
       </svg>
     </div>
@@ -505,17 +553,17 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
   }
 
   return (
-    <Card>
+    <Card className="bg-peach-card rounded-2xl">
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-peach-heading">
           <DollarSign className="h-5 w-5" />
           Open Positions
         </CardTitle>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 text-xs">
-            <label className="text-muted-foreground">Filter</label>
+            <label className="text-peach-muted">Filter</label>
             <select
-              className="border rounded px-2 py-1 text-xs bg-white"
+              className="border border-peach rounded-full px-2 py-1 text-xs bg-white"
               value={filterMode}
               onChange={(e) => setFilterMode(e.target.value)}
             >
@@ -524,9 +572,9 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
             </select>
           </div>
           <div className="flex items-center gap-1 text-xs">
-            <label className="text-muted-foreground">Sort</label>
+            <label className="text-peach-muted">Sort</label>
             <select
-              className="border rounded px-2 py-1 text-xs bg-white"
+              className="border border-peach rounded-full px-2 py-1 text-xs bg-white"
               value={sortKey}
               onChange={(e) => setSortKey(e.target.value)}
             >
@@ -534,7 +582,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
               <option value="closes">Closes</option>
             </select>
             <select
-              className="border rounded px-2 py-1 text-xs bg-white"
+              className="border border-peach rounded-full px-2 py-1 text-xs bg-white"
               value={sortDir}
               onChange={(e) => setSortDir(e.target.value)}
             >
@@ -547,7 +595,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
             size="sm" 
             onClick={refreshPrices}
             disabled={pricesLoading}
-            className="flex items-center gap-1"
+            className="flex items-center gap-1 rounded-full border-peach"
           >
             {pricesLoading ? (
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -593,7 +641,7 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                   : (position.outcome?.name ?? 'Unknown Outcome')
 
               return (
-                <div key={rowKey} className="border border-border rounded-lg p-4 bg-card hover:bg-muted/50 transition-colors">
+                <div key={rowKey} className="soft-card rounded-2xl p-4 bg-[#fff7f2] hover:bg-[#fff2ec] transition-colors">
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
                     {/* Market & Outcome */}
                     <div className="lg:col-span-2">
@@ -684,8 +732,14 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                       </div>
                     </div>
 
-                    {/* Equity Capture Donut */}
-                    <div className="lg:col-span-1 flex items-center justify-center">
+                    {/* Donuts: PnL first, then Unrealized */}
+                    <div className="lg:col-span-2 flex items-center justify-center gap-6">
+                      {pnlData && (
+                        <div className="flex flex-col items-center">
+                          <PnLDonut amount={pnlData.pnl} percent={pnlData.pnlPercent} />
+                          <div className="mt-1 text-xs text-peach-muted">PnL</div>
+                        </div>
+                      )}
                       {(() => {
                         const entry = Number(position.entry_price ?? 0)
                         const cp = Number(currentPrice ?? position.outcome?.probability ?? 0)
@@ -695,16 +749,19 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                         const pctCaptured = maxProfitPerShare > 0 ? Math.max(0, Math.min(1, realizedPerShare / maxProfitPerShare)) * 100 : 0
                         const remainingDollars = Math.max(0, shares * (1 - cp))
                         return (
-                          <EquityDonut percent={pctCaptured} amount={remainingDollars} />
+                          <div className="flex flex-col items-center">
+                            <EquityDonut percent={pctCaptured} amount={remainingDollars} />
+                            <div className="mt-1 text-xs text-peach-muted">Unrealized</div>
+                          </div>
                         )
                       })()}
                     </div>
 
-                    {/* PnL + Exit/SL grouped (two spans, centered) */}
+                    {/* Exit/SL moved to the last column before actions */}
                     <div className="lg:col-span-2">
                       <div className="flex items-start justify-center gap-2">
-                        <div className="w-[60px]">
-                          <div className="text-muted-foreground mb-1 text-xs">Exit/SL</div>
+                        <div className="w-[90px]">
+                          <div className="text-peach-muted mb-1 text-xs">Exit/SL</div>
                           <div className="space-y-1 text-xs whitespace-nowrap">
                             {position.sell_price ? (
                               <div className="flex items-center gap-1 text-green-600">
@@ -724,7 +781,6 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                             )}
                           </div>
                         </div>
-                        {/* Inline edit next to Exit/SL */}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -734,21 +790,6 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                         >
                           <Edit className="h-3 w-3" />
                         </Button>
-                        <div className="w-[60px]">
-                          <div className="text-muted-foreground mb-1 text-xs">PnL</div>
-                          {pnlData ? (
-                            <div className="flex flex-col items-end">
-                              <div className={`${pnlData.pnl >= 0 ? 'text-green-600' : 'text-red-600'} font-medium text-xs`}>
-                                ${Math.abs(pnlData.pnl).toFixed(2)}
-                              </div>
-                              <div className={`${pnlData.pnl >= 0 ? 'text-green-600' : 'text-red-600'} text-xs`}>
-                                {pnlData.pnlPercent >= 0 ? '+' : ''}{pnlData.pnlPercent.toFixed(1)}%
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="text-xs">-</div>
-                          )}
-                        </div>
                       </div>
                     </div>
 

@@ -79,15 +79,19 @@ export default function SnapshotsCard() {
   const formatCurrency = (v) => `$${(Number(v) || 0).toFixed(2)}`
 
   return (
-    <Card className="md:col-span-2">
+    <Card className="md:col-span-2 bg-peach-surface rounded-2xl">
       <CardHeader className="pb-2 flex flex-row items-center justify-between">
-        <CardTitle className="text-sm font-medium text-gray-600">Portfolio Snapshot</CardTitle>
+        <CardTitle className="text-sm font-semibold text-peach-heading">Portfolio Snapshot</CardTitle>
         <div className="flex gap-1">
           {RANGE_PRESETS.map(p => (
             <button
               key={p.key}
               onClick={() => setRange(p.key)}
-              className={`text-xs px-2 py-1 rounded border ${range === p.key ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+              className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+                range === p.key
+                  ? 'btn-peach border-peach'
+                  : 'bg-white text-peach-heading border-peach hover:bg-[#fff9f6]'
+              }`}
             >
               {p.label}
             </button>
@@ -100,24 +104,28 @@ export default function SnapshotsCard() {
         ) : (
           <div style={{ width: '100%', height: 260 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="timestamp" tickFormatter={(t) => new Date(t).toLocaleString()} hide={chartData.length > 40} />
-                <YAxis tickFormatter={(v) => `$${v}`}/>
+              <LineChart data={chartData} margin={{ top: 12, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#efd5cc" />
+                <XAxis dataKey="timestamp" tickFormatter={(t) => new Date(t).toLocaleString()} hide={chartData.length > 40} tick={{ fill: '#a67968', fontSize: 11 }} axisLine={{ stroke: '#efd5cc' }} tickLine={{ stroke: '#efd5cc' }} />
+                <YAxis tickFormatter={(v) => `$${v}`}
+                  tick={{ fill: '#a67968', fontSize: 11 }}
+                  axisLine={{ stroke: '#efd5cc' }}
+                  tickLine={{ stroke: '#efd5cc' }}
+                />
                 <Tooltip
                   labelFormatter={(label) => new Date(label).toLocaleString()}
                   formatter={(value, name) => [formatCurrency(value), name.replace('_', ' ')]}
                 />
-                <Legend />
-                <Line type="monotone" dataKey="total_value" name="Total Value" stroke="#2563eb" strokeWidth={2} dot={false} connectNulls />
-                <Line type="monotone" dataKey="portfolio_value" name="Portfolio" stroke="#10b981" strokeWidth={1.5} dot={false} connectNulls />
-                <Line type="monotone" dataKey="usdc_balance" name="USDC" stroke="#f59e0b" strokeWidth={1.5} dot={false} connectNulls />
+                <Legend wrapperStyle={{ color: '#7c3f2a' }} />
+                <Line type="monotone" dataKey="total_value" name="Total Value" stroke="#6b86c9" strokeWidth={2.5} dot={false} connectNulls />
+                <Line type="monotone" dataKey="portfolio_value" name="Portfolio" stroke="#63a483" strokeWidth={2} dot={false} connectNulls />
+                <Line type="monotone" dataKey="usdc_balance" name="USDC" stroke="#e6a072" strokeWidth={2} dot={false} connectNulls />
               </LineChart>
             </ResponsiveContainer>
           </div>
         )}
         {loading && (
-          <div className="text-xs text-gray-500 mt-2">Loading snapshots…</div>
+          <div className="text-xs text-peach-muted mt-2">Loading snapshots…</div>
         )}
       </CardContent>
     </Card>

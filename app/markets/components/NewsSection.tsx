@@ -63,7 +63,7 @@ export default function NewsSection({ articles, isLoading, compact = false }: Ne
       <div className="space-y-3">
         {articles.slice(0, 5).map((article) => (
           <div key={article.id} className="group">
-            <Link href={`/news/${article.id}`} className="flex gap-3 items-start hover:bg-gray-50 p-2 rounded-lg transition-colors">
+            <Link href={`/news/${article.id}`} className="flex gap-3 items-start hover:bg-[#fff2ec] p-2 rounded-lg transition-colors">
               {/* Tiny image thumbnail */}
               {article.image_url && (
                 <div className="w-16 h-16 flex-shrink-0 relative rounded overflow-hidden">
@@ -78,22 +78,22 @@ export default function NewsSection({ articles, isLoading, compact = false }: Ne
               )}
               
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                <div className="flex items-center gap-2 text-xs text-peach-muted mb-1">
                   <span className="truncate">{article.source || 'Source'}</span>
                   <span>•</span>
                   <span>{formatDate(article.published_at)}</span>
                 </div>
-                <h3 className="font-medium text-sm leading-tight line-clamp-2 group-hover:text-blue-600 transition-colors">
+                <h3 className="font-medium text-sm leading-tight line-clamp-2 text-peach-heading group-hover:opacity-90 transition-opacity">
                   {article.title}
                 </h3>
                 
                 {/* Sentiment and impact scores */}
                 <div className="flex items-center gap-3 mt-1">
-                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                  <div className="flex items-center gap-1 text-xs text-peach-muted">
                     <SentimentDot score={article.sentiment || 0} />
                     <span>Sentiment</span>
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                  <div className="flex items-center gap-1 text-xs text-peach-muted">
                     <ImpactStars impact={article.impact || 0} />
                     <span>Impact</span>
                   </div>
@@ -109,7 +109,7 @@ export default function NewsSection({ articles, isLoading, compact = false }: Ne
   return (
     <div className="space-y-4">
       {articles.map((article) => (
-        <div key={article.id} className="border-b pb-4 last:border-b-0">
+        <div key={article.id} className="pb-4 last:border-b-0" style={{ borderBottom: '1px solid #ebcfc4' }}>
           <Link href={`/news/${article.id}`} className="block group">
             <div className="flex flex-col sm:flex-row gap-4">
               {article.image_url && (
@@ -124,7 +124,7 @@ export default function NewsSection({ articles, isLoading, compact = false }: Ne
                 </div>
               )}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
+                <div className="flex items-center gap-2 text-sm text-peach-muted mb-1">
                   <span>{article.source || 'Unknown Source'}</span>
                   {article.published_at && (
                     <>
@@ -133,21 +133,21 @@ export default function NewsSection({ articles, isLoading, compact = false }: Ne
                     </>
                   )}
                 </div>
-                <h3 className="font-medium group-hover:text-blue-600 transition-colors">
+                <h3 className="font-medium text-peach-heading group-hover:opacity-90 transition-opacity">
                   {article.title}
                 </h3>
                 
                 {/* Sentiment and impact scores */}
                 <div className="flex items-center gap-4 mt-2">
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="text-gray-500">Sentiment:</span>
+                    <span className="text-peach-muted">Sentiment:</span>
                     <SentimentDot score={article.sentiment || 0} />
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-peach-muted">
                       {article.sentiment ? article.sentiment.toFixed(2) : 'N/A'}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="text-gray-500">Impact:</span>
+                    <span className="text-peach-muted">Impact:</span>
                     <ImpactStars impact={article.impact || 0} />
                   </div>
                 </div>

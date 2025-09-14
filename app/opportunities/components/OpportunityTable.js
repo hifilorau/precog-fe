@@ -128,7 +128,7 @@ const OpportunityTable = ({
 
   const SortableHeader = ({ field, children, className = "" }) => (
     <th 
-      className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 ${className}`}
+      className={`px-6 py-3 text-left text-xs font-medium text-peach-muted uppercase tracking-wider cursor-pointer hover:bg-[#fff2ec] ${className}`}
       onClick={() => handleSort(field)}
     >
       <div className="flex items-center space-x-1">
@@ -148,11 +148,11 @@ const OpportunityTable = ({
           {loading ? (
             <div className="text-center py-4">Loading opportunities...</div>
           ) : (
-            <div className="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+            <div className="soft-card rounded-2xl bg-peach-card overflow-hidden">
+              <table className="min-w-full divide-y" style={{ borderColor: '#ebcfc4' }}>
+                <thead className="bg-peach-surface">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-peach-muted uppercase tracking-wider">
                       Market / Outcome
                     </th>
                     <SortableHeader field="current_price">
@@ -176,28 +176,28 @@ const OpportunityTable = ({
                     <SortableHeader field="opportunity_score">
                       Score
                     </SortableHeader>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-peach-muted uppercase tracking-wider">
                       Closes At
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-peach-muted uppercase tracking-wider">
                       Status
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-peach-muted uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white divide-y" style={{ borderColor: '#ebcfc4' }}>
                   {filteredOpportunities.map((opportunity) => (
-                    <tr key={opportunity.id} className="hover:bg-gray-50">
+                    <tr key={opportunity.id} className="hover:bg-[#fff2ec]">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
-                            <div className="text-sm font-medium text-gray-900">
+                            <div className="text-sm font-medium text-peach-heading">
                               {opportunity.market?.name || 'N/A'}
                             </div>
                             {opportunity.outcome && (
-                              <div className="text-sm text-gray-500">
+                              <div className="text-sm text-peach-muted">
                                 {opportunity.outcome.name}
                               </div>
                             )}
@@ -206,15 +206,15 @@ const OpportunityTable = ({
                           <div className="flex flex-col gap-1 ml-2">
                             <button
                               onClick={() => handleCopyId(opportunity.id, 'Opportunity')}
-                              className="p-1 h-6 w-6 text-gray-400 hover:text-gray-600 transition-colors"
-                              title={`Copy Opportunity ID: ${opportunity.id}`}
-                            >
-                              <Info className="h-3 w-3" />
-                            </button>
+                                className="p-1 h-6 w-6 text-peach-muted hover:text-peach-heading transition-colors"
+                                title={`Copy Opportunity ID: ${opportunity.id}`}
+                              >
+                                <Info className="h-3 w-3" />
+                              </button>
                             {opportunity.market?.id && (
                               <button
                                 onClick={() => handleCopyId(opportunity.market.id, 'Market')}
-                                className="p-1 h-6 w-6 text-blue-400 hover:text-blue-600 transition-colors"
+                                className="p-1 h-6 w-6 text-peach-muted hover:text-peach-heading transition-colors"
                                 title={`Copy Market ID: ${opportunity.market.id}`}
                               >
                                 <Info className="h-3 w-3" />
@@ -249,7 +249,7 @@ const OpportunityTable = ({
                                   </div>
                                 )}
                                 {pricesLoading && (
-                                  <div className="text-xs text-gray-400">⟳</div>
+                                  <div className="text-xs text-peach-muted">⟳</div>
                                 )}
                               </div>
                               
@@ -271,18 +271,18 @@ const OpportunityTable = ({
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <span className="mr-1">{getDirectionIcon(opportunity.direction)}</span>
-                          <span className="text-sm text-gray-900">
+                          <span className="text-sm text-peach-heading">
                             {formatMovement(opportunity.magnitude)}
                           </span>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+                        <div className="text-sm text-peach-heading">
                           {formatVolume(opportunity.market?.volume)}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+                        <div className="text-sm text-peach-heading">
                           {opportunity.opportunity_score 
                             ? `${Math.round(opportunity.opportunity_score * 100)}%`
                             : 'N/A'}
@@ -290,7 +290,7 @@ const OpportunityTable = ({
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {opportunity.market?.closes_at ? (
-                          <div className="text-sm text-gray-900">
+                          <div className="text-sm text-peach-heading">
                             {new Date(opportunity.market.closes_at).toLocaleDateString('en-US', {
                               month: 'short',
                               day: 'numeric',
@@ -298,7 +298,7 @@ const OpportunityTable = ({
                             })}
                           </div>
                         ) : (
-                          <span className="text-gray-400">-</span>
+                          <span className="text-peach-muted">-</span>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -308,13 +308,13 @@ const OpportunityTable = ({
                         <div className="flex space-x-2">
                           <Link
                             href={`/opportunities/${opportunity.id}`}
-                            className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                            className="inline-flex items-center px-3 py-2 text-sm leading-4 font-medium rounded-full text-peach-heading bg-peach-surface hover:opacity-90 focus:outline-none soft-card"
                           >
                             View
                           </Link>
                           <button
                             onClick={() => handleQuickBet(opportunity.market, opportunity.outcome)}
-                            className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                            className="inline-flex items-center px-3 py-2 text-sm leading-4 font-medium rounded-full text-white btn-peach"
                           >
                             Buy
                           </button>

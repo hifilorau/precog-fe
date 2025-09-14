@@ -15,13 +15,13 @@ export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <header className="bg-white shadow-sm">
+    <header className="bg-peach-card">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
             {/* Mobile menu button */}
             <button
-              className="sm:hidden mr-2 p-2 rounded hover:bg-gray-100"
+              className="sm:hidden mr-2 p-2 rounded hover:bg-[#fff2ec]"
               aria-label="Open menu"
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen(true)}
@@ -29,35 +29,35 @@ export default function Header() {
               <Menu className="h-5 w-5" />
             </button>
             <div className="flex-shrink-0 flex items-center">
-              <Link href="/" className="text-gray-900 text-2xl font-bold">
+              <Link href="/" className="text-peach-heading text-2xl font-bold">
                 Predictions
               </Link>
             </div>
             <nav className="hidden sm:ml-6 sm:flex sm:space-x-8">
               <Link
                 href="/markets"
-                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                className="border-transparent text-peach-muted hover:text-peach-heading inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium hover:border-peach"
               >
                 Markets
               </Link>
               <Link
                 href="/tracked-markets"
-                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                className="border-transparent text-peach-muted hover:text-peach-heading inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium hover:border-peach"
               >
                 Tracked Markets
               </Link>
               <Link
                 href="/positions"
-                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                className="border-transparent text-peach-muted hover:text-peach-heading inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium hover:border-peach"
               >
                 Positions
               </Link>
-              <Link href="/opportunities" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+              <Link href="/opportunities" className="border-transparent text-peach-muted hover:text-peach-heading inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium hover:border-peach">
                 Opportunities
               </Link>
               <Link
                 href="/news"
-                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                className="border-transparent text-peach-muted hover:text-peach-heading inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium hover:border-peach"
               >
                 News
               </Link>

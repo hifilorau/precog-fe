@@ -77,8 +77,8 @@
 @theme {
   --color-background: rgb(var(--background));
   --color-foreground: rgb(var(--foreground));
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-geist-sans, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Ubuntu, Cantarell, Helvetica Neue, Arial, sans-serif);
+  --font-mono: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
 }
 
 body {
@@ -94,7 +94,6 @@ body {
 
 .border {
   border-color: rgb(var(--border));
-  border-radius: 0;
 }
 
 select {
@@ -146,4 +145,60 @@ select {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Peach theme (scoped) */
+.theme-peach {
+  /* Page background and text */
+  --background: 0 0% 100%; /* keep pure white in oklch -> handled elsewhere */
+  /* Soft peach background */
+  background: #f9ebe5;
+}
+
+.theme-peach {
+  /* Palette inspired by the mockup */
+  --peach-bg: #f9ebe5;          /* page background */
+  --peach-card: #fff5f0;        /* card background */
+  --peach-border: #ebcfc4;      /* card border */
+  --peach-text: #7c3f2a;        /* headings */
+  --peach-muted: #a67968;       /* muted text */
+  --peach-accent: #e08a6b;      /* accent button */
+  --peach-accent-600: #d67e60;  /* hover */
+  --peach-grid: #efd5cc;        /* gridlines */
+  --peach-blue: #6b86c9;        /* chart line 1 */
+  --peach-green: #63a483;       /* chart line 2 */
+  --peach-orange: #e6a072;      /* chart line 3 */
+
+  /* Map to design tokens used by components */
+  --background: 255 255 255; /* keep token structure */
+  --foreground: 32 24 22;
+  --card: 255 245 240;
+  --card-foreground: 52 28 21;
+  --border: 235 207 196;
+  --muted: 255 247 242;
+  --muted-foreground: 166 121 104;
+  --primary: 224 138 107; /* accent */
+  --primary-foreground: 255 255 255;
+  --secondary: 255 239 233;
+  --secondary-foreground: 124 63 42;
+  --ring: 224 138 107;
+  --radius: 1rem;
+
+  /* charts (used via explicit hex in components for better SVG support) */
+  --chart-1: 107 134 201;
+  --chart-2: 99 164 131;
+  --chart-3: 230 160 114;
+}
+
+.theme-peach .text-peach-heading { color: var(--peach-text); }
+.theme-peach .text-peach-muted { color: var(--peach-muted); }
+.theme-peach .bg-peach-card { background-color: var(--peach-card); }
+.theme-peach .bg-peach-surface { background-color: #fff9f6; }
+.theme-peach .border-peach { border-color: var(--peach-border); }
+.theme-peach .btn-peach { background-color: var(--peach-accent); color: #fff; }
+.theme-peach .btn-peach:hover { background-color: var(--peach-accent-600); }
+
+/* Subtle border for cards without using the Tailwind `border` utility */
+.theme-peach .soft-card {
+  box-shadow: inset 0 0 0 1px var(--peach-border);
 }

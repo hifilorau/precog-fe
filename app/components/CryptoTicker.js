@@ -46,11 +46,11 @@ export default function CryptoTicker() {
   };
 
   return (
-    <div className="bg-gray-900 text-white py-1 px-4 overflow-hidden">
+    <div className="py-1 px-4 overflow-hidden" style={{ backgroundColor: '#7c3f2a', color: '#fff' }}>
       <div className="flex items-center space-x-8 animate-pulse">
         {Object.entries(prices).map(([symbol, data]) => (
           <div key={symbol} className="flex items-center space-x-2 whitespace-nowrap">
-            <span className="text-xs font-semibold text-yellow-400">{symbol}</span>
+            <span className="text-xs font-semibold" style={{ color: '#e6a072' }}>{symbol}</span>
             <span className="text-xs font-medium">{formatPrice(data.price)}</span>
             <span className={`text-xs ${getPercentageColor(data['24h'])}`}>
               {formatPercentage(data['24h'])}

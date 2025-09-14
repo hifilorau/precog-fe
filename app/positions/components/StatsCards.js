@@ -75,12 +75,12 @@ export default function StatsCards({ mergedPositions = [] }) {
   }
 
   return (
-    <Card>
+    <Card className="bg-peach-card rounded-2xl">
       <CardHeader className="pb-2 flex flex-row items-center justify-between">
-        <CardTitle className="text-sm font-medium text-gray-700">Portfolio Overview</CardTitle>
+        <CardTitle className="text-sm font-medium text-peach-heading">Portfolio Overview</CardTitle>
         <button
           onClick={() => setCollapsed(v => !v)}
-          className="text-xs px-2 py-1 rounded border bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+          className="text-xs px-2 py-1 rounded-full border bg-white text-peach-heading border-peach hover:bg-[#fff9f6]"
           aria-expanded={!collapsed}
         >
           {collapsed ? 'Expand' : 'Collapse'}
@@ -93,31 +93,31 @@ export default function StatsCards({ mergedPositions = [] }) {
             <SnapshotsCard />
 
             {/* USDC Balance Card */}
-            <Card>
+            <Card className="bg-peach-surface rounded-2xl">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
+                <CardTitle className="text-sm font-medium text-peach-heading flex items-center gap-2">
                   <DollarSign className="h-4 w-4" />
                   USDC Balance
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(usdcBalance)}</div>
-                <p className="text-xs text-gray-500">Available to trade</p>
+                <div className="text-2xl font-bold text-peach-heading">{formatCurrency(usdcBalance)}</div>
+                <p className="text-xs text-peach-muted">Available to trade</p>
               </CardContent>
             </Card>
 
             {/* Portfolio Value Card */}
-            <Card>
+            <Card className="bg-peach-surface rounded-2xl">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
+                <CardTitle className="text-sm font-medium text-peach-heading flex items-center gap-2">
                   <PieChart className="h-4 w-4" />
                   Portfolio Value
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(stats.totalPortfolioValue)}</div>
-                <p className="text-xs text-gray-500">USDC + open positions</p>
-                <div className="text-xs text-gray-600 mt-1">
+                <div className="text-2xl font-bold text-peach-heading">{formatCurrency(stats.totalPortfolioValue)}</div>
+                <p className="text-xs text-peach-muted">USDC + open positions</p>
+                <div className="text-xs text-peach-muted mt-1">
                   {formatCurrency(usdcBalance)} + {formatCurrency(stats.totalOpenPositionsValue)}
                 </div>
               </CardContent>

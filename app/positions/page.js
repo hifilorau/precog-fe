@@ -139,12 +139,13 @@ function PositionsPageContent() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-6">
+    <div className="theme-peach">
+      <div className="container mx-auto px-4 py-8 space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Trading Positions</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-3xl font-bold text-peach-heading">Trading Positions</h1>
+          <p className="text-peach-muted mt-1">
             Manage your prediction market positions with automated stop loss and sell targets
           </p>
         </div>
@@ -172,13 +173,7 @@ function PositionsPageContent() {
             Refresh
           </Button>
           
-          <Button
-            onClick={() => setShowPlaceBetForm(true)}
-            className="flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            Place Bet
-          </Button>
+          {/* Place Bet button removed per request */}
         </div>
       </div>
 
@@ -192,17 +187,17 @@ function PositionsPageContent() {
       />
 
       {/* Information Card */}
-      <Card className="bg-blue-50 border-blue-200">
+      <Card className="bg-peach-card rounded-2xl">
         <CardContent className="pt-6">
           <div className="flex items-start gap-3">
-            <div className="bg-blue-100 rounded-full p-2">
-              <Plus className="h-4 w-4 text-blue-600" />
+            <div className="rounded-full p-2" style={{ backgroundColor: '#ffe6dc' }}>
+              <Plus className="h-4 w-4" style={{ color: '#e08a6b' }} />
             </div>
             <div>
-              <h3 className="font-semibold text-blue-900">
+              <h3 className="font-semibold text-peach-heading">
                 Automated Position Management
               </h3>
-              <p className="text-blue-700 text-sm mt-1">
+              <p className="text-peach-muted text-sm mt-1">
                 Set stop loss and sell target prices when placing bets. Our system will automatically 
                 monitor prices and execute trades when your conditions are met, even when you are not online.
               </p>
@@ -210,6 +205,7 @@ function PositionsPageContent() {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }

@@ -41,21 +41,21 @@ export default function MobileSideMenu({ open, onClose }) {
         role="dialog"
         aria-modal="true"
         aria-label="Main navigation"
-        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-white shadow-xl border-r transition-transform duration-200 ease-in-out ${open ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-peach-card shadow-xl soft-card transition-transform duration-200 ease-in-out ${open ? 'translate-x-0' : '-translate-x-full'}`}
       >
-        <div className="flex items-center justify-between px-4 h-14 border-b">
-          <Link href="/" className="font-semibold text-lg">Predictions</Link>
+        <div className="flex items-center justify-between px-4 h-14 soft-card">
+          <Link href="/" className="font-semibold text-lg text-peach-heading">Predictions</Link>
           <button
             onClick={onClose}
             aria-label="Close menu"
-            className="p-2 rounded hover:bg-gray-100"
+            className="p-2 rounded hover:bg-[#fff2ec]"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Wallet actions */}
-        <div className="px-4 py-3 border-b">
+        <div className="px-4 py-3 soft-card">
           <div className="flex items-center justify-between">
             <WalletConnect />
           </div>
@@ -77,7 +77,7 @@ export default function MobileSideMenu({ open, onClose }) {
               key={item.href}
               href={item.href}
               onClick={onClose}
-              className="block px-3 py-2 rounded hover:bg-gray-100 text-gray-700"
+              className="block px-3 py-2 rounded hover:bg-[#fff2ec] text-peach-heading"
             >
               {item.label}
             </Link>
@@ -87,4 +87,3 @@ export default function MobileSideMenu({ open, onClose }) {
     </div>
   )
 }
-

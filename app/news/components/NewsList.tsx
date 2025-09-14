@@ -142,11 +142,11 @@ export default function NewsList({ query, tag, market, sort, currentPage }: News
           <input
             type="text"
             placeholder="Search news..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full pl-10 pr-4 py-2 border border-peach rounded-full focus:ring-2 focus:ring-[#e08a6b] focus:border-[#e08a6b] bg-white text-peach-heading"
             onChange={(e) => handleSearch(e.target.value)}
             defaultValue={query}
           />
-          <div className="absolute left-3 top-2.5 text-gray-400">
+          <div className="absolute left-3 top-2.5 text-peach-muted">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
@@ -154,7 +154,7 @@ export default function NewsList({ query, tag, market, sort, currentPage }: News
         </div>
         
         <select
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+          className="px-4 py-2 border border-peach rounded-full focus:ring-2 focus:ring-[#e08a6b] focus:border-[#e08a6b] bg-white text-peach-heading"
           value={sort}
           onChange={(e) => handleSortChange(e.target.value)}
         >
@@ -164,10 +164,10 @@ export default function NewsList({ query, tag, market, sort, currentPage }: News
       </div>
       
       {query || tag || market ? (
-        <div className="flex flex-wrap gap-2 items-center text-sm text-gray-600">
+        <div className="flex flex-wrap gap-2 items-center text-sm text-peach-muted">
           <span>Filters:</span>
           {query && (
-            <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+            <span className="bg-peach-surface text-peach-heading text-xs font-medium px-2.5 py-0.5 rounded-full soft-card">
               Search: {query}
               <button 
                 onClick={() => {
@@ -175,14 +175,14 @@ export default function NewsList({ query, tag, market, sort, currentPage }: News
                   params.delete('query');
                   replace(`${pathname}?${params.toString()}`);
                 }}
-                className="ml-1.5 text-blue-800 hover:text-blue-600"
+                className="ml-1.5 text-peach-heading hover:opacity-80"
               >
                 ×
               </button>
             </span>
           )}
           {tag && (
-            <span className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+            <span className="bg-peach-surface text-peach-heading text-xs font-medium px-2.5 py-0.5 rounded-full soft-card">
               Tag: {tag}
               <button 
                 onClick={() => {
@@ -190,14 +190,14 @@ export default function NewsList({ query, tag, market, sort, currentPage }: News
                   params.delete('tag');
                   replace(`${pathname}?${params.toString()}`);
                 }}
-                className="ml-1.5 text-green-800 hover:text-green-600"
+                className="ml-1.5 text-peach-heading hover:opacity-80"
               >
                 ×
               </button>
             </span>
           )}
           {market && (
-            <span className="bg-purple-100 text-purple-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+            <span className="bg-peach-surface text-peach-heading text-xs font-medium px-2.5 py-0.5 rounded-full soft-card">
               Market: {market}
               <button 
                 onClick={() => {
@@ -205,7 +205,7 @@ export default function NewsList({ query, tag, market, sort, currentPage }: News
                   params.delete('market');
                   replace(`${pathname}?${params.toString()}`);
                 }}
-                className="ml-1.5 text-purple-800 hover:text-purple-600"
+                className="ml-1.5 text-peach-heading hover:opacity-80"
               >
                 ×
               </button>
@@ -214,7 +214,7 @@ export default function NewsList({ query, tag, market, sort, currentPage }: News
           {(query || tag || market) && (
             <button 
               onClick={() => replace(pathname)}
-              className="text-sm text-blue-600 hover:text-blue-800"
+              className="text-sm text-peach-heading hover:opacity-80"
             >
               Clear all
             </button>
@@ -254,7 +254,7 @@ export default function NewsList({ query, tag, market, sort, currentPage }: News
         ) : (
           <>
             {articles.map((article) => (
-              <article key={article.id} className="border-b border-gray-200 pb-6 last:border-0">
+              <article key={article.id} className="pb-6 last:border-0" style={{ borderBottom: '1px solid #ebcfc4' }}>
                 <div className="flex flex-col md:flex-row gap-4">
                   {article.image_url ? (
                     <div className="w-full md:w-48 flex-shrink-0 relative h-32">
@@ -282,7 +282,7 @@ export default function NewsList({ query, tag, market, sort, currentPage }: News
                         </>
                       )}
                     </div>
-                    <h2 className="text-xl font-semibold mb-2 hover:text-blue-600">
+                    <h2 className="text-xl font-semibold mb-2 hover:opacity-90 text-peach-heading">
                       <Link href={`/news/${article.id}`}>
                         {article.title}
                       </Link>
@@ -299,7 +299,7 @@ export default function NewsList({ query, tag, market, sort, currentPage }: News
                           <Link 
                             key={tag.id} 
                             href={`/news?tag=${encodeURIComponent(tag.name)}`}
-                            className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-2.5 py-0.5 rounded-full"
+                            className="text-xs bg-peach-surface hover:opacity-90 text-peach-heading px-2.5 py-0.5 rounded-full soft-card"
                           >
                             {tag.name}
                           </Link>
@@ -318,7 +318,7 @@ export default function NewsList({ query, tag, market, sort, currentPage }: News
                     <Link
                       key={page}
                       href={`?page=${page}${query ? `&query=${encodeURIComponent(query)}` : ''}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}${market ? `&market=${encodeURIComponent(market)}` : ''}&sort=${sort}`}
-                      className={`px-3 py-1 rounded-md ${currentPage === page ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                      className={`px-3 py-1 rounded-full ${currentPage === page ? 'btn-peach text-white' : 'text-peach-heading hover:bg-peach-surface soft-card'}`}
                     >
                       {page}
                     </Link>
