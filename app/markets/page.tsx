@@ -416,14 +416,37 @@ export default function MarketsPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {markets.map((market) => (
-              <Link 
-                href={`/markets/${market.id}`} 
-                key={market.id}
-                className="block"
-              >
-                <div className="card p-4 h-full hover:shadow-xl transition-shadow duration-200">
+          {/* Extra space between filters and results */}
+          <div className="mt-6" />
+          {(() => {
+            // Default filter: drop markets with any outcome >= 99%
+            const filtered = (markets || []).filter((m) => {
+              const probs = (m.outcomes || []).map((o: any) => Number(o.probability || 0))
+              return probs.every((p) => !(p >= 0.99))
+            })
+
+            // If sorting by closes_at, push past-dated items to the end
+            let display = filtered
+            if (sortBy === 'closes_at') {
+              const now = Date.now()
+              const upcoming = filtered.filter((m) => m.closes_at && Date.parse(m.closes_at) >= now)
+              const past = filtered.filter((m) => !m.closes_at || Date.parse(m.closes_at) < now)
+              const dir = sortOrder === 'asc' ? 1 : -1
+              const cmp = (a: any, b: any) => (Date.parse(a.closes_at || 0) - Date.parse(b.closes_at || 0)) * dir
+              upcoming.sort(cmp)
+              past.sort(cmp)
+              display = [...upcoming, ...past]
+            }
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                {display.map((market) => (
+                  <Link 
+                    href={`/markets/${market.id}`} 
+                    key={market.id}
+                    className="block"
+                  >
+                <div className="card p-4 h-full hover:shadow-xl transition-shadow duration-200 rounded-2xl">
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex flex-wrap gap-2">
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${
@@ -439,7 +462,7 @@ export default function MarketsPage() {
                         VOL: {formatCurrency(calculateMarketVolume(market))}
                       </span>
                     </div>
-                    <span className="text-sm text-muted-foreground">{market.provider}</span>
+                    {/* Provider hidden per request */}
                   </div>
                   
                   <h2 className="text-xl font-semibold mb-2">{market.name}</h2>
@@ -473,8 +496,10 @@ export default function MarketsPage() {
                   <MarketVolatility volatility={market.volatility} compact />
                 </div>
               </Link>
-            ))}
-          </div>
+                ))}
+              </div>
+            )
+          })()}
           
           {/* Pagination */}
           <div className="flex flex-col items-center">

@@ -32,12 +32,12 @@ const MarketFilters: React.FC<MarketFiltersProps> = ({
   selectedCategory,
   setSelectedCategory,
   availableCategories,
-  selectedStatus,
-  setSelectedStatus,
-  statusOptions,
-  selectedProvider,
-  setSelectedProvider,
-  availableProviders,
+  selectedStatus: _selectedStatus,
+  setSelectedStatus: _setSelectedStatus,
+  statusOptions: _statusOptions,
+  selectedProvider: _selectedProvider,
+  setSelectedProvider: _setSelectedProvider,
+  availableProviders: _availableProviders,
   excludeResolved,
   setExcludeResolved,
   sortBy,
@@ -51,13 +51,25 @@ const MarketFilters: React.FC<MarketFiltersProps> = ({
   breakout6h,
   setBreakout6h,
 }) => {
+  const POPULAR = [
+    'sports',
+    'crypto',
+    'elections',
+    'middle east',
+    'economy',
+  ]
+
+  const otherCategories = (availableCategories || [])
+    .filter((c) => !POPULAR.includes(String(c).toLowerCase()))
+    .sort((a, b) => a.localeCompare(b))
+
   return (
     <>
       <div className="flex flex-wrap items-center gap-4 mb-2">
         <input
           type="text"
           placeholder="Search markets..."
-          className="w-64 px-3 py-2 border border-border rounded-lg text-sm"
+          className="w-64 px-3 py-2 border border-peach rounded-full text-sm bg-white text-peach-heading"
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
         />
@@ -65,11 +77,11 @@ const MarketFilters: React.FC<MarketFiltersProps> = ({
           <input
             id="exclude-resolved"
             type="checkbox"
-            className="w-4 h-4 text-primary bg-input border-border rounded focus:ring-primary"
+            className="w-4 h-4 text-primary bg-input border-peach rounded focus:ring-[#e08a6b]"
             checked={excludeResolved}
             onChange={e => setExcludeResolved(e.target.checked)}
           />
-          <label htmlFor="exclude-resolved" className="text-sm text-muted-foreground">
+          <label htmlFor="exclude-resolved" className="text-sm text-peach-muted">
             Exclude 100% Resolved
           </label>
         </div>
@@ -77,14 +89,14 @@ const MarketFilters: React.FC<MarketFiltersProps> = ({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className={`px-3 py-1 rounded-lg border text-xs font-semibold ${breakout1h ? 'bg-primary text-primary-foreground border-primary' : 'bg-input border-border text-muted-foreground'}`}
+            className={`px-3 py-1 rounded-full border text-xs font-semibold ${breakout1h ? 'btn-peach text-white border-peach' : 'bg-white border-peach text-peach-heading'}`}
             onClick={() => setBreakout1h(breakout1h ? null : true)}
           >
             1h Breakout
           </button>
           <button
             type="button"
-            className={`px-3 py-1 rounded-lg border text-xs font-semibold ${breakout6h ? 'bg-primary text-primary-foreground border-primary' : 'bg-input border-border text-muted-foreground'}`}
+            className={`px-3 py-1 rounded-full border text-xs font-semibold ${breakout6h ? 'btn-peach text-white border-peach' : 'bg-white border-peach text-peach-heading'}`}
             onClick={() => setBreakout6h(breakout6h ? null : true)}
           >
             6h Breakout
@@ -93,7 +105,7 @@ const MarketFilters: React.FC<MarketFiltersProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={handleClearFilters}
-            className={`text-sm px-4 py-2 border rounded-lg ${getActiveFiltersCount() > 0 ? 'bg-primary text-primary-foreground' : 'border-border text-muted-foreground'}`}
+            className={`text-sm px-4 py-2 rounded-full ${getActiveFiltersCount() > 0 ? 'btn-peach text-white' : 'soft-card text-peach-heading'}`}
             disabled={getActiveFiltersCount() === 0}
           >
             Clear Filters {getActiveFiltersCount() > 0 && `(${getActiveFiltersCount()})`}
@@ -102,49 +114,59 @@ const MarketFilters: React.FC<MarketFiltersProps> = ({
       </div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
 
+        <div className="md:col-span-2">
+          <div className="block text-sm font-medium text-peach-muted mb-1">Popular</div>
+          <div className="flex flex-wrap gap-2">
+            {POPULAR.map((cat) => {
+              const label = cat.replace(/\b\w/g, (m) => m.toUpperCase())
+              const selected = String(selectedCategory || '').toLowerCase() === cat
+              return (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(selected ? '' : label)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold ${selected ? 'btn-peach text-white' : 'bg-white text-peach-heading soft-card'}`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         <div>
-          <label className="block text-sm font-medium text-muted-foreground mb-1">Category</label>
+          <label className="block text-sm font-medium text-peach-muted mb-1">More Categories</label>
           <select
-            className="w-full text-sm bg-input border border-border rounded-lg"
+            className="w-full text-sm bg-white border border-peach rounded-full text-peach-heading"
             value={selectedCategory}
             onChange={e => setSelectedCategory(e.target.value)}
           >
             <option value="">All Categories</option>
-            {availableCategories.map(category => (
+            {otherCategories.map(category => (
               <option key={category} value={category}>{category}</option>
             ))}
           </select>
         </div>
-        <div>
+
+        {/* Status and Provider temporarily commented out per request */}
+        {/* <div>
           <label className="block text-sm font-medium text-muted-foreground mb-1">Status</label>
-          <select
-            className="w-full text-sm bg-input border border-border rounded-lg"
-            value={selectedStatus}
-            onChange={e => setSelectedStatus(e.target.value)}
-          >
-            {statusOptions.map(option => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
+          <select className="w-full text-sm bg-input border border-border rounded-lg" value={selectedStatus} onChange={e => setSelectedStatus(e.target.value)}>
+            {statusOptions.map(option => (<option key={option.value} value={option.value}>{option.label}</option>))}
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-muted-foreground mb-1">Provider</label>
-          <select
-            className="w-full text-sm bg-input border border-border rounded-lg"
-            value={selectedProvider}
-            onChange={e => setSelectedProvider(e.target.value)}
-          >
+          <select className="w-full text-sm bg-input border border-border rounded-lg" value={selectedProvider} onChange={e => setSelectedProvider(e.target.value)}>
             <option value="">All Providers</option>
-            {availableProviders.map(provider => (
-              <option key={provider} value={provider}>{provider}</option>
-            ))}
+            {availableProviders.map(provider => (<option key={provider} value={provider}>{provider}</option>))}
           </select>
-        </div>
+        </div> */}
+
         <div>
           <label className="block text-sm font-medium text-muted-foreground mb-1">Sort By</label>
           <div className="flex gap-2">
             <select
-              className="flex-grow text-sm bg-input border border-border rounded-lg"
+              className="flex-grow text-sm bg-white border border-peach rounded-full text-peach-heading"
               value={sortBy}
               onChange={e => setSortBy(e.target.value)}
             >
@@ -157,7 +179,7 @@ const MarketFilters: React.FC<MarketFiltersProps> = ({
             </select>
             <button
               onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-              className="p-2 border border-border rounded-lg"
+              className="p-2 soft-card rounded-full"
               title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
             >
               {sortOrder === 'asc' ? '↑' : '↓'}
