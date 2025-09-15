@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { TrendingUp, Eye, ExternalLink, BookOpen } from 'lucide-react';
+import { TrendingUp, Eye, ExternalLink } from 'lucide-react';
 import PriceHistoryCard from '../../markets/components/PriceHistoryCard';
 import OrderBook from '@/app/components/OrderBook';
 import OpportunityDetails from '../components/OpportunityDetails';
@@ -39,10 +39,7 @@ const OpportunityDetailPage = () => {
   const [isTracking, setIsTracking] = useState(false);
   const [isCheckingTrackedStatus, setIsCheckingTrackedStatus] = useState(true);
   const [showDescription, setShowDescription] = useState(true);
-  const [interval, setInterval] = useState('raw');
-  const [clobTokenIds, setClobTokenIds] = useState(null);
-  const [selectedOrderBookOutcome, setSelectedOrderBookOutcome] = useState(null);
-  const [showOrderBookModal, setShowOrderBookModal] = useState(false);
+  const [clobTokenIds, setClobTokenIds] = useState(null); // eslint-disable-line @typescript-eslint/no-unused-vars
 
   // Use the market hook for additional market data
   const { market: marketFromHook } = useMarket(opportunity?.market_id);
@@ -352,21 +349,6 @@ const OpportunityDetailPage = () => {
     setSelectedOutcome(null);
   };
 
-  const handleShowOrderBook = (outcome, outcomeIndex) => {
-    setSelectedOrderBookOutcome({ outcome, outcomeIndex });
-    setShowOrderBookModal(true);
-  };
-
-  const handleOrderBookClose = () => {
-    setShowOrderBookModal(false);
-    setSelectedOrderBookOutcome(null);
-  };
-
-  // Get CLOB token ID for the selected outcome
-  const getSelectedClobTokenId = () => {
-    if (!clobTokenIds || !selectedOrderBookOutcome) return null;
-    return clobTokenIds[selectedOrderBookOutcome.outcomeIndex];
-  };
 
   if (loading) {
     return (
