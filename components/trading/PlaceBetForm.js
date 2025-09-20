@@ -5,11 +5,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, TrendingUp, Shield, Target, Sparkles, BookOpen, ArrowDown, ArrowUp, Wallet } from 'lucide-react'
+import { Loader2, TrendingUp, TrendingDown, Shield, Target, Sparkles, BookOpen, ArrowDown, ArrowUp, Wallet } from 'lucide-react'
 import { useStateContext } from '@/app/store'
 import { toast } from 'sonner'
 import apiFetch from '@/lib/apiFetch'
 import { useRealTimePrices } from '@/hooks/useRealTimePrices'
+import { getSidePrice } from '@/app/utils/formatters'
 
 // Helper function to calculate number of shares based on balance and price
 const calculateShares = (balance, price, percentage = 0.08) => {
@@ -18,10 +19,11 @@ const calculateShares = (balance, price, percentage = 0.08) => {
   return Math.floor(amountToSpend / price);
 };
 
-function PlaceBetForm({ 
-  market, 
-  outcome, 
-  onSuccess, 
+function PlaceBetForm({
+  market,
+  outcome,
+  side = 'yes',
+  onSuccess,
   onCancel,
   showCard = true,
   className = ""
@@ -354,6 +356,7 @@ function PlaceBetForm({
       const positionData = {
         market_id: market.id,
         outcome_id: outcome.id,
+        side: side, // Add side parameter
         max_bid_price: parseFloat(formData.max_bid_price) / 100, // Convert to decimal for backend
         volume: parseFloat(formData.volume),
         sell_price: formData.sell_price ? parseFloat(formData.sell_price) / 100 : null,
@@ -524,11 +527,14 @@ function PlaceBetForm({
   }, [market?.id, outcome?.id, outcome?.probability]);
   
   // Live price for display and suggestions: prefer hook, fall back to props
-  const currentPrice = useMemo(() => (
-    (outcome?.id && currentPrices.get(outcome.id) !== undefined)
+  const currentPrice = useMemo(() => {
+    const probability = (outcome?.id && currentPrices.get(outcome.id) !== undefined)
       ? currentPrices.get(outcome.id)
-      : (outcome?.current_price ?? outcome?.probability ?? 0.5)
-  ), [currentPrices, outcome?.id, outcome?.current_price, outcome?.probability])
+      : (outcome?.current_price ?? outcome?.probability ?? 0.5);
+
+    // Return side-specific price
+    return getSidePrice({ current_price: probability }, side);
+  }, [currentPrices, outcome?.id, outcome?.current_price, outcome?.probability, side])
 
   // Memoized PnL previews for UI labels
   const potentialGain = useMemo(() => (
@@ -566,7 +572,19 @@ function PlaceBetForm({
 
   return (
     <div className={className}>
-      <h3 className='text-lg font-semibold mb-4'>Place Limit Order</h3>
+      <h3 className='text-lg font-semibold mb-4 flex items-center gap-2'>
+        {side === 'yes' ? (
+          <>
+            <TrendingUp className="h-5 w-5 text-green-600" />
+            Place Yes Order
+          </>
+        ) : (
+          <>
+            <TrendingDown className="h-5 w-5 text-red-600" />
+            Place No Order
+          </>
+        )}
+      </h3>
       {showCard && (
         <div className="mb-4">
           <h3 className="text-lg font-semibold flex items-center gap-2 mb-2">
@@ -577,7 +595,7 @@ function PlaceBetForm({
             <p><strong>Market:</strong> {market.question}</p>
             <p><strong>Outcome:</strong> {outcome.name}</p>
             <p>
-              <strong>Current Price:</strong> {(currentPrice * 100).toFixed(1)}¢
+              <strong>{side === 'yes' ? 'Yes' : 'No'} Price:</strong> {(currentPrice * 100).toFixed(1)}¢
               {pricesLoading && <Loader2 className="ml-1 h-3 w-3 inline animate-spin" />}
             </p>
             
@@ -871,7 +889,7 @@ function PlaceBetForm({
                 Placing Order...
               </>
             ) : (
-              'Place Limit Order'
+              `Place ${side === 'yes' ? 'Yes' : 'No'} Order`
             )}
           </Button>
         </div>

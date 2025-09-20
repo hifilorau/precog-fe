@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { TrendingUp, Eye, ExternalLink } from 'lucide-react';
+import { TrendingUp, TrendingDown, Eye, ExternalLink, BookOpen } from 'lucide-react';
 import PriceHistoryCard from '../../markets/components/PriceHistoryCard';
 import OrderBook from '@/app/components/OrderBook';
 import OpportunityDetails from '../components/OpportunityDetails';
-import { formatPrice, formatVolume } from '@/app/utils/formatters';
+import { formatPrice, formatVolume, formatYesNoPrice, getSidePrice } from '@/app/utils/formatters';
 import PlaceBetForm from '@/components/trading/PlaceBetForm';
 import MarketVolatility from '@/app/components/MarketVolatility';
 import NewsSection from '../../markets/components/NewsSection';
@@ -20,6 +20,102 @@ import { getMarketNews } from '@/lib/services/newsService';
 import { getCache, setCache } from '@/lib/services/cache';
 import { marketApi } from '@/lib/services/api';
 import { getMarketClobTokenIds } from '@/lib/services/polymarketApi';
+import { useRealTimePrices } from '@/hooks/useRealTimePrices';
+
+// Memoized outcome card component to prevent unnecessary re-renders
+const OutcomeCard = memo(({
+  outcome,
+  outcomeIndex,
+  isOpportunity,
+  livePrice,
+  hasClobId,
+  onBuyClick,
+  onShowOrderBook
+}) => {
+  const yesPrice = formatYesNoPrice(livePrice, 'yes');
+  const noPrice = formatYesNoPrice(livePrice, 'no');
+
+  return (
+    <div
+      className={`border p-4 rounded-lg transition-all hover:shadow-md ${
+        isOpportunity
+          ? 'border-blue-500 bg-blue-50 shadow-sm'
+          : 'border-gray-200 hover:border-gray-300'
+      }`}
+    >
+      <div className="flex justify-between items-center">
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="font-medium text-gray-900">{outcome.name}</h3>
+            {isOpportunity && (
+              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                Opportunity
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-4 mt-1">
+            <div className="flex gap-4">
+              <div className="text-green-600 font-semibold">
+                Yes: {yesPrice}
+              </div>
+              <div className="text-red-600 font-semibold">
+                No: {noPrice}
+              </div>
+            </div>
+            {outcome.current_volume && (
+              <span className="text-sm text-gray-600">
+                Vol: {formatVolume(outcome.current_volume)}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {hasClobId && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onShowOrderBook(outcome, outcomeIndex)}
+              className="flex items-center gap-1"
+            >
+              <BookOpen className="h-4 w-4" />
+              Order Book
+            </Button>
+          )}
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              onClick={() => onBuyClick(outcome, 'yes')}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              <TrendingUp className="h-4 w-4 mr-1" />
+              Yes
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onBuyClick(outcome, 'no')}
+              className="border-red-600 text-red-600 hover:bg-red-50"
+            >
+              <TrendingDown className="h-4 w-4 mr-1" />
+              No
+            </Button>
+          </div>
+        </div>
+      </div>
+      {/* Progress bar */}
+      <div className="w-full bg-gray-200 h-2 rounded-full mt-3">
+        <div
+          className={`h-2 rounded-full transition-all duration-300 ${
+            isOpportunity ? 'bg-blue-500' : 'bg-gray-400'
+          }`}
+          style={{ width: `${Math.round(livePrice * 100)}%` }}
+        ></div>
+      </div>
+    </div>
+  );
+});
+
+OutcomeCard.displayName = 'OutcomeCard';
 
 const OpportunityDetailPage = () => {
   const params = useParams();
@@ -31,6 +127,7 @@ const OpportunityDetailPage = () => {
   const [priceHistory, setPriceHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [selectedOutcome, setSelectedOutcome] = useState(null);
+  const [selectedSide, setSelectedSide] = useState('yes');
   const [showBetModal, setShowBetModal] = useState(false);
   const [newsArticles, setNewsArticles] = useState([]);
   const [newsLoading, setNewsLoading] = useState(true);
@@ -39,7 +136,10 @@ const OpportunityDetailPage = () => {
   const [isTracking, setIsTracking] = useState(false);
   const [isCheckingTrackedStatus, setIsCheckingTrackedStatus] = useState(true);
   const [showDescription, setShowDescription] = useState(true);
-  const [clobTokenIds, setClobTokenIds] = useState(null); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const [clobTokenIds, setClobTokenIds] = useState(null);
+  const [selectedOrderBookOutcome, setSelectedOrderBookOutcome] = useState(null);
+  const [showOrderBookModal, setShowOrderBookModal] = useState(false);
+  const [interval, setInterval] = useState('raw');
 
   // Use the market hook for additional market data
   const { market: marketFromHook } = useMarket(opportunity?.market_id);
@@ -47,6 +147,38 @@ const OpportunityDetailPage = () => {
   // Get the best market data (prefer the hook data if available)
   const market = marketFromHook || opportunity?.market;
   const marketId = opportunity?.market_id || opportunity?.market?.id;
+
+  // Set up real-time pricing for all outcomes in this market
+  const marketOutcomes = useMemo(() => market?.outcomes || [], [market?.outcomes]);
+
+  // Memoize the pricing items to prevent unnecessary re-renders
+  const pricingItems = useMemo(() =>
+    marketOutcomes.map(outcome => ({
+      outcome: outcome,
+      market: market
+    })), [marketOutcomes, market]
+  );
+
+  const { currentPrices, loading: pricesLoading, error: pricesError } = useRealTimePrices(
+    pricingItems,
+    `market-${marketId}`,
+    'opportunity',
+    { pollMs: 30000, immediate: true } // Reduced polling frequency to 30 seconds
+  );
+
+  // Memoized helper function to get live price with fallback to database
+  const getLivePrice = useCallback((outcome) => {
+    if (!outcome) return 0.5;
+
+    // Prefer real-time price if available
+    const livePrice = currentPrices.get(outcome.id);
+    if (livePrice !== undefined && livePrice !== null) {
+      return livePrice;
+    }
+
+    // Fallback to database values
+    return outcome.current_price || outcome.probability || 0.5;
+  }, [currentPrices]);
 
   const getDirectionIcon = (direction) => {
     if (direction === 'up') return '↗️';
@@ -189,25 +321,38 @@ const OpportunityDetailPage = () => {
     const marketId = opportunity?.market_id || opportunity?.market?.id;
     if (!marketId) return;
 
+    let isCancelled = false;
+
     const fetchNews = async () => {
       setNewsLoading(true);
       try {
         const cacheEntry = getCache('news', marketId);
-        if (cacheEntry) {
+        if (cacheEntry && !isCancelled) {
           setNewsArticles(cacheEntry.data);
           setNewsLoading(false);
           return;
         }
         const newsData = await getMarketNews(marketId);
-        setCache('news', marketId, newsData, 10 * 60 * 1000);
-        setNewsArticles(newsData);
+        if (!isCancelled) {
+          setCache('news', marketId, newsData, 10 * 60 * 1000);
+          setNewsArticles(newsData);
+        }
       } catch (err) {
-        console.error('Failed to fetch news:', err);
+        if (!isCancelled) {
+          console.error('Failed to fetch news:', err);
+        }
       } finally {
-        setNewsLoading(false);
+        if (!isCancelled) {
+          setNewsLoading(false);
+        }
       }
     };
+
     fetchNews();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [opportunity?.market_id, opportunity?.market?.id]);
 
   // Check tracked status
@@ -215,20 +360,33 @@ const OpportunityDetailPage = () => {
     const marketId = opportunity?.market_id || opportunity?.market?.id;
     if (!marketId) return;
 
+    let isCancelled = false;
+
     const checkTrackedStatus = async () => {
       setIsCheckingTrackedStatus(true);
       try {
         const trackedMarkets = await marketApi.getTrackedMarkets();
-        const trackedMarket = trackedMarkets.find(tm => tm.market_id === marketId);
-        setIsTracked(!!trackedMarket);
-        setTrackedMarketId(trackedMarket?.id || null);
+        if (!isCancelled) {
+          const trackedMarket = trackedMarkets.find(tm => tm.market_id === marketId);
+          setIsTracked(!!trackedMarket);
+          setTrackedMarketId(trackedMarket?.id || null);
+        }
       } catch (err) {
-        console.error('Failed to check tracked status:', err);
+        if (!isCancelled) {
+          console.error('Failed to check tracked status:', err);
+        }
       } finally {
-        setIsCheckingTrackedStatus(false);
+        if (!isCancelled) {
+          setIsCheckingTrackedStatus(false);
+        }
       }
     };
+
     checkTrackedStatus();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [opportunity?.market_id, opportunity?.market?.id]);
 
   // Fetch price history when opportunity data is loaded
@@ -262,16 +420,26 @@ const OpportunityDetailPage = () => {
     const externalId = market?.external_id;
     if (!externalId) return;
 
+    let isCancelled = false;
+
     const fetchClobTokenIds = async () => {
       try {
         const tokenIds = await getMarketClobTokenIds(externalId);
-        setClobTokenIds(tokenIds);
+        if (!isCancelled) {
+          setClobTokenIds(tokenIds);
+        }
       } catch (error) {
-        console.error('Failed to fetch CLOB token IDs:', error);
+        if (!isCancelled) {
+          console.error('Failed to fetch CLOB token IDs:', error);
+        }
       }
     };
 
     fetchClobTokenIds();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [market?.external_id]);
 
   const getStatusBadge = (status) => {
@@ -332,22 +500,39 @@ const OpportunityDetailPage = () => {
     fetchNews();
   };
 
-  const handleBuyClick = (outcome) => {
+  const handleBuyClick = useCallback((outcome, side = 'yes') => {
     setSelectedOutcome(outcome);
+    setSelectedSide(side);
     setShowBetModal(true);
-  };
+  }, []);
 
-  const handleBetSuccess = (position) => {
+  const handleBetSuccess = useCallback((position) => {
     console.log('Position created:', position);
     setShowBetModal(false);
     setSelectedOutcome(null);
     refreshNews();
-  };
+  }, [refreshNews]);
 
-  const handleBetCancel = () => {
+  const handleBetCancel = useCallback(() => {
     setShowBetModal(false);
     setSelectedOutcome(null);
-  };
+  }, []);
+
+  const handleShowOrderBook = useCallback((outcome, outcomeIndex) => {
+    setSelectedOrderBookOutcome({ outcome, outcomeIndex });
+    setShowOrderBookModal(true);
+  }, []);
+
+  const handleOrderBookClose = useCallback(() => {
+    setShowOrderBookModal(false);
+    setSelectedOrderBookOutcome(null);
+  }, []);
+
+  // Get CLOB token ID for the selected outcome
+  const getSelectedClobTokenId = useCallback(() => {
+    if (!clobTokenIds || !selectedOrderBookOutcome) return null;
+    return clobTokenIds[selectedOrderBookOutcome.outcomeIndex];
+  }, [clobTokenIds, selectedOrderBookOutcome]);
 
 
   if (loading) {
@@ -441,18 +626,29 @@ const OpportunityDetailPage = () => {
                     Flagged Opportunity: {opportunity.outcome.name}
                   </h3>
                   <p className="text-blue-700 mt-1">
-                    Current Price: {formatPrice(opportunity.outcome.current_price)} •
+                    Yes: {formatYesNoPrice(getLivePrice(opportunity.outcome), 'yes')} •
+                    No: {formatYesNoPrice(getLivePrice(opportunity.outcome), 'no')} •
                     Movement: {getDirectionIcon(opportunity.direction)} {formatPrice(opportunity.magnitude)} •
                     Score: {(opportunity.opportunity_score * 100).toFixed(1)}%
                   </p>
                 </div>
-                <Button
-                  onClick={() => handleBuyClick(opportunity.outcome)}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  Trade This Opportunity
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => handleBuyClick(opportunity.outcome, 'yes')}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    <TrendingUp className="h-4 w-4 mr-1" />
+                    Yes {formatYesNoPrice(getLivePrice(opportunity.outcome), 'yes')}
+                  </Button>
+                  <Button
+                    onClick={() => handleBuyClick(opportunity.outcome, 'no')}
+                    variant="outline"
+                    className="border-red-600 text-red-600 hover:bg-red-50"
+                  >
+                    <TrendingDown className="h-4 w-4 mr-1" />
+                    No {formatYesNoPrice(getLivePrice(opportunity.outcome), 'no')}
+                  </Button>
+                </div>
               </div>
             </div>
           )}
@@ -473,57 +669,22 @@ const OpportunityDetailPage = () => {
               <h2 className="text-xl font-semibold mb-4">All Market Outcomes</h2>
               <p className="text-gray-600 mb-4">Click to trade any outcome in this market</p>
               <div className="space-y-3">
-                {market.outcomes.map((outcome) => {
+                {market.outcomes.map((outcome, outcomeIndex) => {
                   const isOpportunity = outcome.id === opportunity.outcome_id;
+                  const hasClobId = clobTokenIds && outcomeIndex < clobTokenIds.length;
+                  const livePrice = getLivePrice(outcome);
+
                   return (
-                    <div
+                    <OutcomeCard
                       key={outcome.id}
-                      className={`border p-4 rounded-lg transition-all hover:shadow-md ${
-                        isOpportunity
-                          ? 'border-blue-500 bg-blue-50 shadow-sm'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="flex justify-between items-center">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-medium text-gray-900">{outcome.name}</h3>
-                            {isOpportunity && (
-                              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
-                                Opportunity
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-4 mt-1">
-                            <span className="text-lg font-semibold">
-                              {formatPrice(outcome.current_price)}
-                            </span>
-                            {outcome.current_volume && (
-                              <span className="text-sm text-gray-600">
-                                Vol: {formatVolume(outcome.current_volume)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <Button
-                          size="sm"
-                          onClick={() => handleBuyClick(outcome)}
-                          className={isOpportunity ? 'bg-blue-600 hover:bg-blue-700' : ''}
-                        >
-                          <TrendingUp className="h-4 w-4 mr-1" />
-                          Trade
-                        </Button>
-                      </div>
-                      {/* Progress bar */}
-                      <div className="w-full bg-gray-200 h-2 rounded-full mt-3">
-                        <div
-                          className={`h-2 rounded-full transition-all duration-300 ${
-                            isOpportunity ? 'bg-blue-500' : 'bg-gray-400'
-                          }`}
-                          style={{ width: `${Math.round((outcome.current_price || 0) * 100)}%` }}
-                        ></div>
-                      </div>
-                    </div>
+                      outcome={outcome}
+                      outcomeIndex={outcomeIndex}
+                      isOpportunity={isOpportunity}
+                      livePrice={livePrice}
+                      hasClobId={hasClobId}
+                      onBuyClick={handleBuyClick}
+                      onShowOrderBook={handleShowOrderBook}
+                    />
                   );
                 })}
               </div>
@@ -648,9 +809,47 @@ const OpportunityDetailPage = () => {
               <PlaceBetForm
                 market={market}
                 outcome={selectedOutcome}
+                side={selectedSide}
                 onSuccess={handleBetSuccess}
                 onCancel={handleBetCancel}
                 showCard={false}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order Book Modal */}
+      {showOrderBookModal && selectedOrderBookOutcome && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold">
+                  Order Book: {selectedOrderBookOutcome.outcome.name}
+                </h2>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOrderBookClose}
+                >
+                  Close
+                </Button>
+              </div>
+              <div className="mb-4 p-3 bg-gray-50 rounded">
+                <p className="text-sm text-gray-600">
+                  Current Price: <span className="font-semibold">{formatPrice(getLivePrice(selectedOrderBookOutcome.outcome))}</span>
+                  {selectedOrderBookOutcome.outcome.current_volume && (
+                    <span className="ml-4">
+                      Volume: <span className="font-semibold">{formatVolume(selectedOrderBookOutcome.outcome.current_volume)}</span>
+                    </span>
+                  )}
+                </p>
+              </div>
+              <OrderBook
+                clobId={getSelectedClobTokenId()}
+                market={market}
+                outcome={selectedOrderBookOutcome.outcome}
               />
             </div>
           </div>

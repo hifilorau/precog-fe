@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { DollarSign, Loader2, RefreshCw, Target, Shield, Edit, Plus, ChevronRight, ChevronDown, Copy, XCircle, RotateCw, MoreVertical } from 'lucide-react'
 import EditPositionModal from './EditPositionModal'
 import QuickBetModal from './QuickBetModal'
+import SellPositionForm from '@/components/trading/SellPositionForm'
 
 import {
   formatPrice,
@@ -150,6 +151,8 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
   const [showEditModal, setShowEditModal] = useState(false)
   const [buyMorePosition, setBuyMorePosition] = useState(null)
   const [showBuyMoreModal, setShowBuyMoreModal] = useState(false)
+  const [sellingPosition, setSellingPosition] = useState(null)
+  const [showSellModal, setShowSellModal] = useState(false)
   const [menuOpenFor, setMenuOpenFor] = useState(null)
   // Orders/expansion state
   const [expanded, setExpanded] = useState({}) // { [positionId]: boolean }
@@ -518,6 +521,32 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
     setShowBuyMoreModal(true)
   }
 
+  // Sell modal handlers
+  const handleSellPositionModal = (position) => {
+    setSellingPosition(position)
+    setShowSellModal(true)
+  }
+
+  const handleCloseSellModal = () => {
+    setShowSellModal(false)
+    setSellingPosition(null)
+  }
+
+  const handleSellSuccess = () => {
+    // Refresh positions after successful sell
+    const fetchPositionsData = async () => {
+      try {
+        const mergedData = await fetchMergedPositions()
+        const positions = Array.isArray(mergedData) ? dedupePositions(mergedData) : []
+        updateState({ mergedPositions: positions })
+      } catch (err) {
+        console.error('Error fetching positions after sell:', err)
+      }
+    }
+    fetchPositionsData()
+    handleCloseSellModal()
+  }
+
   const handleCloseBuyMoreModal = () => {
     setShowBuyMoreModal(false)
     setBuyMorePosition(null)
@@ -864,7 +893,8 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                           {menuOpenFor === position.id && (
                             <div className="absolute right-0 mt-1 w-40 bg-white border rounded shadow-md z-10">
                               <button className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50" onClick={() => { handleBuyMore(position); setMenuOpenFor(null) }}>Buy more</button>
-                              <button className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50" onClick={() => { handleSellPosition(position); setMenuOpenFor(null) }}>Sell</button>
+                              <button className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50" onClick={() => { handleSellPosition(position); setMenuOpenFor(null) }}>Quick Sell</button>
+                              <button className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50" onClick={() => { handleSellPositionModal(position); setMenuOpenFor(null) }}>Sell...</button>
                               <button className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50" onClick={() => { handleCopyPositionId(position.id); setMenuOpenFor(null) }}>Copy ID</button>
                               <button className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50" onClick={() => { handleEditPosition(position); setMenuOpenFor(null) }}>Edit prices</button>
                               {(position.status === 'open' || position.status === 'not_filled') && (
@@ -1030,6 +1060,22 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
           />
         );
       })()}
+
+      {/* Sell Position Modal */}
+      {sellingPosition && showSellModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <SellPositionForm
+                position={sellingPosition}
+                onSuccess={handleSellSuccess}
+                onCancel={handleCloseSellModal}
+                showCard={false}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   )
 }

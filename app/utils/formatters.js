@@ -18,6 +18,30 @@ export const formatVolume = (value) => {
   return num.toLocaleString(undefined, { maximumFractionDigits: 2 });
 };
 
+// Yes/No price calculation utilities for binary markets
+export const calculateYesNoPrice = (probability) => {
+  if (probability === null || probability === undefined) {
+    return { yesPrice: 0.5, noPrice: 0.5 };
+  }
+  const yesPrice = Number(probability); // e.g., 0.65
+  const noPrice = 1 - yesPrice; // e.g., 0.35
+  return { yesPrice, noPrice };
+};
+
+// Format Yes/No prices for display
+export const formatYesNoPrice = (probability, side = 'yes') => {
+  const { yesPrice, noPrice } = calculateYesNoPrice(probability);
+  const price = side === 'yes' ? yesPrice : noPrice;
+  return `${(price * 100).toFixed(1)}¢`;
+};
+
+// Get side-specific price for trading
+export const getSidePrice = (outcome, side) => {
+  const probability = outcome?.current_price ?? outcome?.probability ?? 0.5;
+  const { yesPrice, noPrice } = calculateYesNoPrice(probability);
+  return side === 'yes' ? yesPrice : noPrice;
+};
+
 // PnL calculation
 export const calculatePnL = (position, currentPrice) => {
   if (!position?.entry_price || currentPrice === undefined || currentPrice === null) return null;
