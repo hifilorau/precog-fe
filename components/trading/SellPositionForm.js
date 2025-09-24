@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 // Using native select for now - can upgrade to custom component later
-import { Loader2, TrendingDown, Target, Shield, Info, DollarSign, Percent } from 'lucide-react'
+import { Loader2, TrendingDown, Target, Info } from 'lucide-react'
 import { useStateContext } from '@/app/store'
 import { toast } from 'sonner'
 import { formatPrice, getCurrentPrice, calculatePnL } from '@/app/utils/formatters'
@@ -19,7 +19,7 @@ function SellPositionForm({
   className = ""
 }) {
   // Get wallet balance and portfolio value from global state
-  const { balance: globalBalance, portfolioValue, updateState } = useStateContext();
+  const { } = useStateContext();
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -38,7 +38,6 @@ function SellPositionForm({
   const entryPrice = position.entry_price || position.max_bid_price || 0;
 
   // Calculate current position value and PnL
-  const currentValue = useMemo(() => maxShares * currentPrice, [maxShares, currentPrice]);
   const pnlData = useMemo(() => calculatePnL(position, currentPrice), [position, currentPrice]);
 
   // Calculate shares to sell based on input
@@ -81,7 +80,7 @@ function SellPositionForm({
       sellPrice: suggestedPrice.toFixed(1),
       quantity: formData.sellType === 'full' ? '100' : '25' // Default to 25% partial sell
     }));
-  }, [position, currentPrice]);
+  }, [position, currentPrice, formData.sellType]);
 
   const updateFormData = useCallback((field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));

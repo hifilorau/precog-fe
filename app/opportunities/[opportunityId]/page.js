@@ -4,11 +4,11 @@ import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { TrendingUp, TrendingDown, Eye, ExternalLink, BookOpen } from 'lucide-react';
+import { TrendingUp, TrendingDown, Eye, ExternalLink, BookOpen, BarChart3, Loader2 } from 'lucide-react';
 import PriceHistoryCard from '../../markets/components/PriceHistoryCard';
 import OrderBook from '@/app/components/OrderBook';
 import OpportunityDetails from '../components/OpportunityDetails';
-import { formatPrice, formatVolume, formatYesNoPrice, getSidePrice } from '@/app/utils/formatters';
+import { formatPrice, formatVolume, formatYesNoPrice } from '@/app/utils/formatters';
 import PlaceBetForm from '@/components/trading/PlaceBetForm';
 import MarketVolatility from '@/app/components/MarketVolatility';
 import NewsSection from '../../markets/components/NewsSection';
@@ -30,7 +30,8 @@ const OutcomeCard = memo(({
   livePrice,
   hasClobId,
   onBuyClick,
-  onShowOrderBook
+  onShowOrderBook,
+  researchResult
 }) => {
   const yesPrice = formatYesNoPrice(livePrice, 'yes');
   const noPrice = formatYesNoPrice(livePrice, 'no');
@@ -66,6 +67,46 @@ const OutcomeCard = memo(({
               <span className="text-sm text-gray-600">
                 Vol: {formatVolume(outcome.current_volume)}
               </span>
+            )}
+
+            {/* Research Analysis Results */}
+            {researchResult && (
+              <div className="mt-3 p-3 bg-gray-50 rounded-lg border-l-4 border-blue-500">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium text-gray-900 flex items-center gap-1">
+                    <BarChart3 className="h-4 w-4" />
+                    Research Analysis
+                  </h4>
+                  <span className="text-xs text-gray-500">
+                    Confidence: {(researchResult.confidence_level * 100).toFixed(0)}%
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <div className="text-gray-600">Market Price:</div>
+                    <div className="font-semibold">
+                      {(researchResult.market_probability * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-gray-600">Calculated Prob:</div>
+                    <div className="font-semibold text-blue-600">
+                      {(researchResult.calculated_probability * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-gray-600">Edge:</div>
+                    <div className={`font-semibold ${
+                      researchResult.edge > 0 ? 'text-green-600' :
+                      researchResult.edge < 0 ? 'text-red-600' : 'text-gray-600'
+                    }`}>
+                      {researchResult.edge > 0 ? '+' : ''}{(researchResult.edge * 100).toFixed(1)}%
+                      {researchResult.edge > 0.05 && <span className="ml-1 text-xs">(Strong edge!)</span>}
+                      {researchResult.edge < -0.05 && <span className="ml-1 text-xs">(Overpriced)</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -139,7 +180,12 @@ const OpportunityDetailPage = () => {
   const [clobTokenIds, setClobTokenIds] = useState(null);
   const [selectedOrderBookOutcome, setSelectedOrderBookOutcome] = useState(null);
   const [showOrderBookModal, setShowOrderBookModal] = useState(false);
-  const [interval, setInterval] = useState('raw');
+
+  // Research analysis state
+  const [researchData, setResearchData] = useState(null);
+  const [researchLoading, setResearchLoading] = useState(false);
+  const [researchError, setResearchError] = useState(null);
+  const [showResearchResults, setShowResearchResults] = useState(false);
 
   // Use the market hook for additional market data
   const { market: marketFromHook } = useMarket(opportunity?.market_id);
@@ -159,7 +205,7 @@ const OpportunityDetailPage = () => {
     })), [marketOutcomes, market]
   );
 
-  const { currentPrices, loading: pricesLoading, error: pricesError } = useRealTimePrices(
+  const { currentPrices } = useRealTimePrices(
     pricingItems,
     `market-${marketId}`,
     'opportunity',
@@ -479,11 +525,10 @@ const OpportunityDetailPage = () => {
     }
   };
 
-  const handleIntervalChange = (newInterval) => setInterval(newInterval);
   const toggleDescription = () => setShowDescription(!showDescription);
   const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleString() : 'N/A';
 
-  const refreshNews = () => {
+  const refreshNews = useCallback(() => {
     const marketId = opportunity?.market_id || opportunity?.market?.id;
     if (!marketId) return;
     const fetchNews = async () => {
@@ -498,7 +543,7 @@ const OpportunityDetailPage = () => {
       }
     };
     fetchNews();
-  };
+  }, [opportunity?.market_id, opportunity?.market?.id]);
 
   const handleBuyClick = useCallback((outcome, side = 'yes') => {
     setSelectedOutcome(outcome);
@@ -527,6 +572,140 @@ const OpportunityDetailPage = () => {
     setShowOrderBookModal(false);
     setSelectedOrderBookOutcome(null);
   }, []);
+
+  // Research analysis function
+  const analyzeMarketProbabilities = useCallback(async () => {
+    if (!market || !market.outcomes || !market.closes_at) {
+      console.error('Missing market data for research analysis');
+      return;
+    }
+
+    // Check if this is a crypto market (BTC, ETH, SOL)
+    const marketQuestion = market.question?.toLowerCase() || '';
+    let cryptoAsset = null;
+
+    if (marketQuestion.includes('bitcoin') || marketQuestion.includes('btc')) {
+      cryptoAsset = 'BTC';
+    } else if (marketQuestion.includes('ethereum') || marketQuestion.includes('eth')) {
+      cryptoAsset = 'ETH';
+    } else if (marketQuestion.includes('solana') || marketQuestion.includes('sol')) {
+      cryptoAsset = 'SOL';
+    }
+
+    if (!cryptoAsset) {
+      setResearchError('This market is not supported for crypto probability analysis. Currently supported: BTC, ETH, SOL markets.');
+      return;
+    }
+
+    setResearchLoading(true);
+    setResearchError(null);
+
+    try {
+      // Extract price targets from market outcomes
+      const outcomes = market.outcomes.map(outcome => {
+        const outcomeName = outcome.name;
+
+        // Try to extract price target from outcome name
+        // Look for patterns like "$70000", "$70k", "70000", etc.
+        const priceMatch = outcomeName.match(/\$?(\d+(?:,\d{3})*(?:\.\d+)?)[kK]?/);
+        let targetPrice = null;
+
+        if (priceMatch) {
+          let price = parseFloat(priceMatch[1].replace(/,/g, ''));
+          // Handle 'k' suffix (e.g., "70k" = 70000)
+          if (priceMatch[0].toLowerCase().includes('k')) {
+            price *= 1000;
+          }
+          targetPrice = price;
+        }
+
+        // Determine direction based on outcome name
+        let direction = 'above';
+        if (outcomeName.toLowerCase().includes('below') ||
+            outcomeName.toLowerCase().includes('under') ||
+            outcomeName.toLowerCase().includes('less')) {
+          direction = 'below';
+        } else if (outcomeName.toLowerCase().includes('between')) {
+          direction = 'between';
+        }
+
+        console.log(`Outcome: "${outcomeName}" -> Price: $${targetPrice} Direction: ${direction}`);
+
+        return {
+          name: outcomeName,
+          target_price: targetPrice,
+          direction: direction
+        };
+      }).filter(outcome => outcome.target_price !== null);
+
+      if (outcomes.length === 0) {
+        setResearchError('Could not extract price targets from market outcomes. Make sure outcomes contain price information like "$70k" or "$65000".');
+        return;
+      }
+
+      console.log('Analyzing crypto probabilities for:', {
+        asset: cryptoAsset,
+        outcomes,
+        expires_at: market.closes_at,
+        market_question: market.question
+      });
+
+      console.log('Extracted outcomes:', outcomes.map(o => ({
+        name: o.name,
+        target_price: o.target_price,
+        direction: o.direction
+      })));
+
+      // Call the research API
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/research/crypto-analysis`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          asset: cryptoAsset,
+          outcomes,
+          expires_at: market.closes_at
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+
+      const analysisData = await response.json();
+
+      // Add market probabilities from current prices
+      const enrichedResults = analysisData.results.map(result => {
+        const outcome = market.outcomes.find(o => o.name === result.outcome_name);
+        if (outcome) {
+          const livePrice = getLivePrice(outcome);
+          const marketProbability = livePrice;
+          const edge = result.calculated_probability - marketProbability;
+
+          return {
+            ...result,
+            market_probability: marketProbability,
+            edge: edge
+          };
+        }
+        return result;
+      });
+
+      setResearchData({
+        ...analysisData,
+        results: enrichedResults
+      });
+      setShowResearchResults(true);
+
+    } catch (error) {
+      console.error('Error analyzing market probabilities:', error);
+      setResearchError(error.message || 'Failed to analyze market probabilities');
+    } finally {
+      setResearchLoading(false);
+    }
+  }, [market, getLivePrice]);
 
   // Get CLOB token ID for the selected outcome
   const getSelectedClobTokenId = useCallback(() => {
@@ -590,6 +769,20 @@ const OpportunityDetailPage = () => {
             <Button
               variant="outline"
               size="sm"
+              onClick={analyzeMarketProbabilities}
+              disabled={researchLoading}
+              className="flex items-center gap-2"
+            >
+              {researchLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <BarChart3 className="h-4 w-4" />
+              )}
+              {researchLoading ? 'Analyzing...' : 'Analyze Probabilities'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => window.open(`/markets/${marketId}`, '_blank')}
               className="flex items-center gap-2"
             >
@@ -599,6 +792,62 @@ const OpportunityDetailPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Research Error Display */}
+      {researchError && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Research Analysis Error: {researchError}
+          </div>
+        </div>
+      )}
+
+      {/* Research Results Summary */}
+      {researchData && showResearchResults && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-blue-900 flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Crypto Research Analysis - {researchData.asset}
+            </h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowResearchResults(false)}
+              className="text-blue-600 hover:text-blue-800"
+            >
+              ✕ Hide
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
+            <div>
+              <div className="text-blue-700 font-medium">Current Price</div>
+              <div className="text-lg font-bold">${researchData.current_price.toLocaleString()}</div>
+            </div>
+            <div>
+              <div className="text-blue-700 font-medium">Time Remaining</div>
+              <div className="text-lg font-bold">{researchData.time_remaining_hours.toFixed(1)}h</div>
+            </div>
+            <div>
+              <div className="text-blue-700 font-medium">24h Change</div>
+              <div className={`text-lg font-bold ${
+                researchData.recent_momentum.change_24h >= 0 ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {researchData.recent_momentum.change_24h >= 0 ? '+' : ''}
+                {(researchData.recent_momentum.change_24h * 100).toFixed(1)}%
+              </div>
+            </div>
+            <div>
+              <div className="text-blue-700 font-medium">Volatility</div>
+              <div className="text-lg font-bold capitalize">{researchData.recent_momentum.volatility_regime}</div>
+            </div>
+          </div>
+          <div className="text-xs text-blue-600">
+            Analysis based on {researchData.simulation_count.toLocaleString()} Monte Carlo simulations
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}
@@ -674,6 +923,11 @@ const OpportunityDetailPage = () => {
                   const hasClobId = clobTokenIds && outcomeIndex < clobTokenIds.length;
                   const livePrice = getLivePrice(outcome);
 
+                  // Find matching research result for this outcome
+                  const researchResult = researchData?.results?.find(
+                    result => result.outcome_name === outcome.name
+                  );
+
                   return (
                     <OutcomeCard
                       key={outcome.id}
@@ -684,6 +938,7 @@ const OpportunityDetailPage = () => {
                       hasClobId={hasClobId}
                       onBuyClick={handleBuyClick}
                       onShowOrderBook={handleShowOrderBook}
+                      researchResult={researchResult}
                     />
                   );
                 })}
@@ -730,7 +985,7 @@ const OpportunityDetailPage = () => {
             <PriceHistoryCard
               priceHistory={priceHistory}
               priceHistoryLoading={loadingHistory}
-              handleIntervalChange={handleIntervalChange}
+              handleIntervalChange={() => {}}
               market={market}
               showOnlyHighlighted={opportunity?.outcome ? true : false}
               highlightedOutcomeId={opportunity?.outcome?.name}

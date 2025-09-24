@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { DollarSign, Loader2, RefreshCw, Target, Shield, Edit, Plus, ChevronRight, ChevronDown, Copy, XCircle, RotateCw, MoreVertical } from 'lucide-react'
+import { DollarSign, Loader2, RefreshCw, Target, Shield, Edit, Plus, ChevronRight, ChevronDown, Copy, XCircle, RotateCw, MoreVertical, ExternalLink } from 'lucide-react'
 import EditPositionModal from './EditPositionModal'
 import QuickBetModal from './QuickBetModal'
 import SellPositionForm from '@/components/trading/SellPositionForm'
@@ -818,6 +818,28 @@ export default function PositionsTable({ refreshTrigger = 0 }) {
                           title="Edit Exit/SL"
                         >
                           <Edit className="h-3 w-3" />
+                        </Button>
+                        {/* Polymarket link */}
+                        {position.market?.external_id && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => window.open(`https://polymarket.com/event/${position.market.external_id}`, '_blank')}
+                            className="p-1 h-6 w-6"
+                            title="View on Polymarket"
+                          >
+                            <ExternalLink className="h-3 w-3 text-blue-600" />
+                          </Button>
+                        )}
+                        {/* Opportunity page link */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => window.open(`/opportunities/${position.market?.id}`, '_blank')}
+                          className="p-1 h-6 w-6"
+                          title="View Opportunity"
+                        >
+                          <ExternalLink className="h-3 w-3 text-green-600" />
                         </Button>
                       </div>
                     </div>
